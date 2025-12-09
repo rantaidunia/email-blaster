@@ -63,17 +63,18 @@ def detect_columns(df):
 
 
 # -------------------------------------------------------
-# QUILL FIX PREP — ensures Quill never resets
+# QUILL PREP
+# ensure session state keys exist BEFORE any reruns that may come from widgets below
 # -------------------------------------------------------
 if "body_html" not in st.session_state:
-    st.session_state.body_html = ""
+    st.session_state.body_html = ""  # persisted HTML content
 
-if "quill_init_done" not in st.session_state:
-    st.session_state.quill_init_done = False
+if "quill_initialized" not in st.session_state:
+    st.session_state.quill_initialized = False  # whether we already passed initial value
 
 
 # -------------------------------------------------------
-# EMAIL LOGIN
+# EMAIL LOGIN (keep this early)
 # -------------------------------------------------------
 st.header("1. Email Account Login")
 email_user = st.text_input("Your Email Address", placeholder="example@gmail.com")
@@ -82,9 +83,46 @@ st.info("For Gmail: create an App Password at https://myaccount.google.com/apppa
 
 
 # -------------------------------------------------------
-# EXCEL UPLOAD
+# 3) Email Details — render Quill BEFORE file uploader
+# This is IMPORTANT: Quill must mount before the uploader to avoid re-init races.
 # -------------------------------------------------------
-st.header("2. Upload Recipient Excel File")
+st.header("2. Email Details")
+
+subject = st.text_input("Email Subject")
+
+st.markdown("### Email Body (Rich Text Editor)")
+
+# --- Critical pattern:
+# 1) On first load, call st_quill with value=st.session_state.body_html
+# 2) On subsequent reruns, call st_quill WITHOUT the value parameter
+#    (calling with value=None or value="" after init breaks the editor)
+editor_output = None
+if not st.session_state.quill_initialized:
+    # first-time mounting: provide the saved HTML (may be empty)
+    editor_output = st_quill(
+        value=st.session_state.body_html,
+        html=True,
+        placeholder="Write your email here... Use {name}, {company}, etc.",
+        key="MAIN_EDITOR"
+    )
+    st.session_state.quill_initialized = True
+else:
+    # subsequent renders: do NOT pass 'value' argument
+    editor_output = st_quill(
+        html=True,
+        placeholder="Write your email here... Use {name}, {company}, etc.",
+        key="MAIN_EDITOR"
+    )
+
+# store only when editor gives us content (avoid overwriting with empty)
+if editor_output and editor_output != st.session_state.body_html:
+    st.session_state.body_html = editor_output
+
+
+# -------------------------------------------------------
+# EXCEL UPLOAD (now safe to place after Quill)
+# -------------------------------------------------------
+st.header("3. Upload Recipient Excel File")
 uploaded_excel = st.file_uploader("Upload .xlsx file", type=["xlsx"])
 
 df = None
@@ -105,41 +143,7 @@ if uploaded_excel:
 
 
 # -------------------------------------------------------
-# EMAIL DETAILS — FINAL PROPER WORKING QUILL
-# -------------------------------------------------------
-st.header("3. Email Details")
-
-subject = st.text_input("Email Subject")
-
-st.markdown("### Email Body (Rich Text Editor)")
-
-
-# 🔥 **THE FIX**
-# Quill must receive a value ONLY on its first load.
-# After initialization, we must NEVER send "value=" again.
-if not st.session_state.quill_init_done:
-    quill_value = st.session_state.body_html
-else:
-    quill_value = None  # prevents re-render bug
-
-
-editor_output = st_quill(
-    value=quill_value,
-    html=True,
-    placeholder="Write your email here...",
-    key="MAIN_EDITOR"
-)
-
-if not st.session_state.quill_init_done:
-    st.session_state.quill_init_done = True
-
-# Update stored value
-if editor_output is not None:
-    st.session_state.body_html = editor_output
-
-
-# -------------------------------------------------------
-# PREVIEW
+# PREVIEW (uses body_html which is stable)
 # -------------------------------------------------------
 st.header("4. Preview")
 
@@ -207,7 +211,7 @@ if st.button("🚀 Send Now"):
             tmp.write(file.read())
             tmp.close()
             temp_paths.append(tmp.name)
-    except:
+    except Exception as e:
         st.error("Attachment error.")
         st.stop()
 
