@@ -94,42 +94,45 @@ if uploaded_excel:
         st.error(f"Failed to process Excel: {e}")
 
 
-# -------------------------------------------------------
-# QUILL EDITOR — FULLY FIXED
-# -------------------------------------------------------
+# ---------------------------
+# 3) Email Details + Quill FIXED
+# ---------------------------
 st.header("3. Email Details")
 
 subject = st.text_input("Email Subject")
 
 st.markdown("### Email Body (Rich Text Editor)")
 
-# Initialize session state once
+# Initialize session storage for the user's text
 if "body_html" not in st.session_state:
     st.session_state.body_html = ""
-if "quill_initialized" not in st.session_state:
-    st.session_state.quill_initialized = False
 
-# Provide initial value ONLY ONCE
-initial_quill_value = None
-if not st.session_state.quill_initialized:
-    initial_quill_value = st.session_state.body_html
+# Track whether we already initialized the editor
+if "quill_ready" not in st.session_state:
+    st.session_state.quill_ready = False
 
-# Render Quill
-body_html = st_quill(
-    value=initial_quill_value,
-    placeholder="Write your email here... Use {name}, {company}, etc.",
+# Only provide initial value on FIRST load.
+# After that, NEVER send value again or Quill will break.
+if not st.session_state.quill_ready:
+    quill_value = st.session_state.body_html
+else:
+    quill_value = st.session_state.body_html if st.session_state.body_html else st.session_state.get("DO_NOT_SEND", None)
+
+# Render Quill (DO NOT PASS "" OR NONE after initialization)
+editor_output = st_quill(
+    value=quill_value if not st.session_state.quill_ready else None,
     html=True,
-    key="email_quill_editor"
+    placeholder="Write your email here...",
+    key="email_editor"
 )
 
-# Mark initialized
-if not st.session_state.quill_initialized:
-    st.session_state.quill_initialized = True
+# Mark Quill as initialized
+if not st.session_state.quill_ready:
+    st.session_state.quill_ready = True
 
-# Update stored HTML only if changed
-if body_html and body_html != st.session_state.body_html:
-    st.session_state.body_html = body_html
-
+# Save content (only if editor returned a value)
+if editor_output:
+    st.session_state.body_html = editor_output
 
 # -------------------------------------------------------
 # PREVIEW
@@ -261,3 +264,4 @@ if st.button("🚀 Send Now"):
     for p in temp_paths:
         try: os.unlink(p)
         except: pass
+
