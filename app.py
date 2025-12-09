@@ -63,12 +63,23 @@ def detect_columns(df):
 
 
 # -------------------------------------------------------
+# QUILL FIX PREP — ensures Quill never resets
+# -------------------------------------------------------
+if "body_html" not in st.session_state:
+    st.session_state.body_html = ""
+
+if "quill_init_done" not in st.session_state:
+    st.session_state.quill_init_done = False
+
+
+# -------------------------------------------------------
 # EMAIL LOGIN
 # -------------------------------------------------------
 st.header("1. Email Account Login")
 email_user = st.text_input("Your Email Address", placeholder="example@gmail.com")
 email_pass = st.text_input("App Password (NOT your normal password)", type="password")
 st.info("For Gmail: create an App Password at https://myaccount.google.com/apppasswords")
+
 
 # -------------------------------------------------------
 # EXCEL UPLOAD
@@ -85,7 +96,6 @@ if uploaded_excel:
         detected_fields = detect_columns(df)
 
         st.success(f"Excel uploaded successfully — {len(df)} rows loaded.")
-
         st.info(f"Detected fields: {detected_fields}")
 
         if "email" not in detected_fields:
@@ -94,45 +104,39 @@ if uploaded_excel:
         st.error(f"Failed to process Excel: {e}")
 
 
-# ---------------------------
-# 3) Email Details + Quill FIXED
-# ---------------------------
+# -------------------------------------------------------
+# EMAIL DETAILS — FINAL PROPER WORKING QUILL
+# -------------------------------------------------------
 st.header("3. Email Details")
 
 subject = st.text_input("Email Subject")
 
 st.markdown("### Email Body (Rich Text Editor)")
 
-# Initialize session storage for the user's text
-if "body_html" not in st.session_state:
-    st.session_state.body_html = ""
 
-# Track whether we already initialized the editor
-if "quill_ready" not in st.session_state:
-    st.session_state.quill_ready = False
-
-# Only provide initial value on FIRST load.
-# After that, NEVER send value again or Quill will break.
-if not st.session_state.quill_ready:
+# 🔥 **THE FIX**
+# Quill must receive a value ONLY on its first load.
+# After initialization, we must NEVER send "value=" again.
+if not st.session_state.quill_init_done:
     quill_value = st.session_state.body_html
 else:
-    quill_value = st.session_state.body_html if st.session_state.body_html else st.session_state.get("DO_NOT_SEND", None)
+    quill_value = None  # prevents re-render bug
 
-# Render Quill (DO NOT PASS "" OR NONE after initialization)
+
 editor_output = st_quill(
-    value=quill_value if not st.session_state.quill_ready else None,
+    value=quill_value,
     html=True,
     placeholder="Write your email here...",
-    key="email_editor"
+    key="MAIN_EDITOR"
 )
 
-# Mark Quill as initialized
-if not st.session_state.quill_ready:
-    st.session_state.quill_ready = True
+if not st.session_state.quill_init_done:
+    st.session_state.quill_init_done = True
 
-# Save content (only if editor returned a value)
-if editor_output:
+# Update stored value
+if editor_output is not None:
     st.session_state.body_html = editor_output
+
 
 # -------------------------------------------------------
 # PREVIEW
@@ -146,7 +150,7 @@ if st.button("Show Preview"):
         preview = st.session_state.body_html
 
         if df is not None and len(df) > 0:
-            row = df.iloc[0]  # First row only
+            row = df.iloc[0]
 
             for field, col in detected_fields.items():
                 placeholder = f"{{{field}}}"
@@ -167,6 +171,7 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
+
 # -------------------------------------------------------
 # SEND EMAILS
 # -------------------------------------------------------
@@ -182,7 +187,7 @@ if st.button("🚀 Send Now"):
         st.stop()
 
     if not email_user or not email_pass:
-        st.error("Email and app password required.")
+        st.error("Email + App password required.")
         st.stop()
 
     if not subject.strip():
@@ -193,6 +198,7 @@ if st.button("🚀 Send Now"):
         st.error("Email body is empty.")
         st.stop()
 
+    # Save uploaded attachments
     temp_paths = []
     try:
         for file in uploaded_files:
@@ -205,7 +211,7 @@ if st.button("🚀 Send Now"):
         st.error("Attachment error.")
         st.stop()
 
-    # SMTP Connect
+    # Connect SMTP
     try:
         yag = yagmail.SMTP(email_user, email_pass)
     except Exception as e:
@@ -216,21 +222,19 @@ if st.button("🚀 Send Now"):
     total = len(df)
     progress = st.progress(0)
     count = 0
-
     email_col = detected_fields["email"]
 
-    for index, row in df.iterrows():
+    for idx, row in df.iterrows():
         body = st.session_state.body_html
 
         for field, col in detected_fields.items():
-            val = "" if pd.isna(row[col]) else str(row[col])
-            body = body.replace(f"{{{field}}}", val)
+            body = body.replace(f"{{{field}}}", "" if pd.isna(row[col]) else str(row[col]))
 
         raw_emails = re.split(r"[\/,; ]+", str(row[email_col]))
         emails = [e for e in raw_emails if "@" in e]
 
         if not emails:
-            logs.append([index, raw_emails, "NO_EMAIL", "SKIPPED", datetime.utcnow()])
+            logs.append([idx, raw_emails, "NO_EMAIL", "SKIPPED", datetime.utcnow()])
             count += 1
             progress.progress(count / total)
             continue
@@ -243,9 +247,9 @@ if st.button("🚀 Send Now"):
                     contents=body,
                     attachments=temp_paths
                 )
-                logs.append([index, email_addr, "SENT", "OK", datetime.utcnow()])
+                logs.append([idx, email_addr, "SENT", "OK", datetime.utcnow()])
             except Exception as err:
-                logs.append([index, email_addr, "FAILED", str(err), datetime.utcnow()])
+                logs.append([idx, email_addr, "FAILED", str(err), datetime.utcnow()])
 
         count += 1
         progress.progress(count / total)
@@ -255,13 +259,10 @@ if st.button("🚀 Send Now"):
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"logs_{ts}.csv"
 
-    csv_data = log_df.to_csv(index=False)
-
     st.success("All emails processed!")
-    st.download_button("📥 Download Logs", csv_data, filename, "text/csv")
+    st.download_button("📥 Download Logs", log_df.to_csv(index=False), filename, "text/csv")
 
-    # Clean temp
+    # Cleanup temp
     for p in temp_paths:
         try: os.unlink(p)
         except: pass
-
