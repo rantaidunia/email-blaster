@@ -1,0 +1,5 @@
+streamlit
+pandas
+yagmail
+streamlit-quill
+openpyxl
