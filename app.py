@@ -73,6 +73,30 @@ Upload an Excel (.xlsx) with an **email** column.
 Use placeholders like `{name}`, `{position}`, `{company}`, etc.
 """)
 
+
+# -------------------------------------------------------
+# REMEMBER ME SYSTEM (Option B)
+# -------------------------------------------------------
+
+# Initialize states
+if "saved_email" not in st.session_state:
+    st.session_state.saved_email = None
+
+if "saved_pass" not in st.session_state:
+    st.session_state.saved_pass = None
+
+if "remember_email" not in st.session_state:
+    st.session_state.remember_email = False
+
+if "remember_pass_session" not in st.session_state:
+    st.session_state.remember_pass_session = False
+
+# Load email from browser URL params
+query_params = st.experimental_get_query_params()
+if "email" in query_params and st.session_state.saved_email is None:
+    st.session_state.saved_email = query_params["email"][0]
+
+
 # -------------------------------------------------------
 # FIELD DETECTION
 # -------------------------------------------------------
@@ -120,13 +144,41 @@ if "body_html" not in st.session_state:
 if "quill_initialized" not in st.session_state:
     st.session_state.quill_initialized = False
 
+
 # -------------------------------------------------------
 # EMAIL LOGIN
 # -------------------------------------------------------
 st.header("1. Email Account Login")
-email_user = st.text_input("Your Email Address", placeholder="example@gmail.com")
-email_pass = st.text_input("App Password (NOT your regular password)", type="password")
+
+# Remember Me checkboxes
+st.session_state.remember_email = st.checkbox("Remember Email")
+st.session_state.remember_pass_session = st.checkbox("Remember App Password (this session only)")
+
+# Email field (load if saved)
+email_user = st.text_input(
+    "Your Email Address",
+    placeholder="example@gmail.com",
+    value=st.session_state.saved_email if st.session_state.saved_email else ""
+)
+
+# App password field (session only)
+email_pass = st.text_input(
+    "App Password (NOT your regular password)",
+    type="password",
+    value=st.session_state.saved_pass if st.session_state.remember_pass_session else ""
+)
+
 st.info("For Gmail: Create an App Password at https://myaccount.google.com/apppasswords")
+
+# Save email if remembered
+if st.session_state.remember_email and email_user:
+    st.session_state.saved_email = email_user
+    st.experimental_set_query_params(email=email_user)
+
+# Save password only in session
+if st.session_state.remember_pass_session and email_pass:
+    st.session_state.saved_pass = email_pass
+
 
 # -------------------------------------------------------
 # EMAIL DETAILS
@@ -147,6 +199,7 @@ st.session_state.quill_initialized = True
 if editor_output and editor_output != st.session_state.body_html:
     st.session_state.body_html = editor_output
 
+
 # -------------------------------------------------------
 # EXCEL UPLOAD
 # -------------------------------------------------------
@@ -165,6 +218,7 @@ if uploaded_excel:
     except Exception as e:
         st.error(f"Failed to read Excel: {e}")
 
+
 # -------------------------------------------------------
 # PREVIEW
 # -------------------------------------------------------
@@ -179,11 +233,14 @@ if st.button("Show Preview"):
         if df is not None and len(df) > 0:
             first = df.iloc[0]
             for field, col in detected_fields.items():
-                preview = preview.replace(f"{{{field}}}",
-                                         "" if pd.isna(first[col]) else str(first[col]))
+                preview = preview.replace(
+                    f"{{{field}}}",
+                    "" if pd.isna(first[col]) else str(first[col])
+                )
 
         st.markdown("### Email Preview")
         st.markdown(preview, unsafe_allow_html=True)
+
 
 # -------------------------------------------------------
 # ATTACHMENTS
@@ -194,6 +251,7 @@ uploaded_files = st.file_uploader(
     type=["pdf", "jpeg", "jpg", "png"],
     accept_multiple_files=True
 )
+
 
 # -------------------------------------------------------
 # SEND EMAILS
@@ -248,10 +306,12 @@ if st.button("🚀 Send Now"):
         body = st.session_state.body_html
 
         for field, col in detected_fields.items():
-            body = body.replace(f"{{{field}}}",
-                                "" if pd.isna(row[col]) else str(row[col]))
+            body = body.replace(
+                f"{{{field}}}",
+                "" if pd.isna(row[col]) else str(row[col])
+            )
 
-        # Split multiple emails in a single row
+        # Split multiple emails
         raw_emails = re.split(r"[\/,; ]+", str(row[email_col]))
         emails = [e for e in raw_emails if "@" in e]
 
@@ -276,9 +336,7 @@ if st.button("🚀 Send Now"):
         count += 1
         progress.progress(count / total)
 
-    # -------------------------------------------------------
     # EXPORT CLEAN EXCEL LOG
-    # -------------------------------------------------------
     excel_path, excel_name = export_logs_excel(logs)
 
     st.success("All emails processed!")
@@ -291,3 +349,4 @@ if st.button("🚀 Send Now"):
             os.unlink(p)
         except:
             pass
+
