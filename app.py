@@ -15,98 +15,7 @@ from openpyxl.styles import Font, Border, Side
 from openpyxl.utils import get_column_letter
 
 # -------------------------------------------------------
-# PAGE CONFIG
-# -------------------------------------------------------
-st.set_page_config(
-    page_title="Email Blaster",
-    layout="wide",
-    page_icon="📧"
-)
-
-# -------------------------------------------------------
-# CUSTOM CSS — MODERN UI
-# -------------------------------------------------------
-st.markdown(
-    """
-    <style>
-
-    /* Global font & spacing */
-    body, input, textarea {
-        font-family: 'Inter', sans-serif !important;
-    }
-
-    /* Card-like container */
-    .section-card {
-        background: #ffffff;
-        padding: 25px 30px;
-        border-radius: 14px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.04);
-        margin-bottom: 25px;
-        border: 1px solid #f2f2f2;
-    }
-
-    .header-title {
-        font-size: 32px !important;
-        font-weight: 700 !important;
-        margin-bottom: 5px;
-    }
-
-    .subheader {
-        font-size: 18px;
-        font-weight: 600;
-        margin-bottom: 15px;
-        color:#444;
-    }
-
-    /* Fix streamlit's default wide spacing */
-    .block-container {
-        padding-top: 1rem;
-        padding-left: 2rem;
-        padding-right: 2rem;
-    }
-
-    /* Better buttons */
-    .stButton>button {
-        border-radius: 10px;
-        padding: 10px 18px;
-        font-size: 16px;
-        border: 0px;
-        background: #4b8df8;
-        color: white;
-        font-weight: 600;
-        transition: 0.2s;
-    }
-    .stButton>button:hover {
-        background: #2f71e8;
-        color: white;
-    }
-
-    /* Preview box */
-    .preview-box {
-        padding: 20px;
-        border-radius: 12px;
-        background: #fafafa;
-        border: 1px solid #eee;
-        margin-top: 15px;
-    }
-
-    /* Hide "Made with Streamlit" */
-    #MainMenu {visibility:hidden;}
-    footer {visibility:hidden;}
-
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# -------------------------------------------------------
-# HEADER
-# -------------------------------------------------------
-st.markdown("<div class='header-title'>📧 Email Blaster</div>", unsafe_allow_html=True)
-st.write("A simple and powerful tool to send personalized bulk emails.")
-
-# -------------------------------------------------------
-# EXCEL LOGGING FUNCTION
+# EXCEL LOGGING FUNCTION (CLEAN FORMAT)
 # -------------------------------------------------------
 def export_logs_excel(logs):
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -120,12 +29,15 @@ def export_logs_excel(logs):
     headers = ["Row", "Email", "Status", "Details", "Timestamp"]
     ws.append(headers)
 
+    # Bold headers
     for col in range(1, len(headers) + 1):
         ws.cell(row=1, column=col).font = Font(bold=True)
 
+    # Insert log rows
     for row in logs:
         ws.append(row)
 
+    # Borders and auto-width
     thin = Border(
         left=Side(style="thin"),
         right=Side(style="thin"),
@@ -137,6 +49,7 @@ def export_logs_excel(logs):
         for cell in row:
             cell.border = thin
 
+    # Auto column width
     for col in ws.columns:
         max_len = 0
         col_letter = get_column_letter(col[0].column)
@@ -149,15 +62,40 @@ def export_logs_excel(logs):
     return filepath, filename
 
 
-# Remember states
-if "saved_email" not in st.session_state: st.session_state.saved_email = None
-if "saved_pass" not in st.session_state: st.session_state.saved_pass = None
-if "remember_email" not in st.session_state: st.session_state.remember_email = False
-if "remember_pass_session" not in st.session_state: st.session_state.remember_pass_session = False
+# -------------------------------------------------------
+# CONFIG
+# -------------------------------------------------------
+st.set_page_config(page_title="Email Blaster", layout="wide")
+st.title("📧 Email Blaster")
 
+st.markdown("""
+Upload an Excel (.xlsx) with an **email** column.  
+Use placeholders like `{name}`, `{position}`, `{company}`, etc.
+""")
+
+
+# -------------------------------------------------------
+# REMEMBER ME SYSTEM (Option B)
+# -------------------------------------------------------
+
+# Initialize states
+if "saved_email" not in st.session_state:
+    st.session_state.saved_email = None
+
+if "saved_pass" not in st.session_state:
+    st.session_state.saved_pass = None
+
+if "remember_email" not in st.session_state:
+    st.session_state.remember_email = False
+
+if "remember_pass_session" not in st.session_state:
+    st.session_state.remember_pass_session = False
+
+# Load email from browser URL params
 query_params = st.experimental_get_query_params()
 if "email" in query_params and st.session_state.saved_email is None:
     st.session_state.saved_email = query_params["email"][0]
+
 
 # -------------------------------------------------------
 # FIELD DETECTION
@@ -177,7 +115,7 @@ def detect_columns(df):
     normalized_cols = {normalize(c): c for c in df.columns}
 
     for field, aliases in FIELD_MAP.items():
-        if field == "email":
+        if field == "email":  # hard match for email
             for norm, real in normalized_cols.items():
                 if norm == "email":
                     detected[field] = real
@@ -191,197 +129,224 @@ def detect_columns(df):
                 if alias_norm in norm or norm in alias_norm:
                     detected[field] = real
                     break
+            if field in detected:
+                break
 
     return detected
 
 
 # -------------------------------------------------------
-# SECTION 1 — LOGIN
+# QUILL SETUP
 # -------------------------------------------------------
-st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='subheader'>1. Email Login</div>", unsafe_allow_html=True)
+if "body_html" not in st.session_state:
+    st.session_state.body_html = ""
 
-colA, colB = st.columns([1, 1])
+if "quill_initialized" not in st.session_state:
+    st.session_state.quill_initialized = False
 
-with colA:
-    st.session_state.remember_email = st.checkbox("Remember Email")
-with colB:
-    st.session_state.remember_pass_session = st.checkbox("Remember App Password (session only)")
 
+# -------------------------------------------------------
+# EMAIL LOGIN
+# -------------------------------------------------------
+st.header("1. Email Account Login")
+
+# Remember Me checkboxes
+st.session_state.remember_email = st.checkbox("Remember Email")
+st.session_state.remember_pass_session = st.checkbox("Remember App Password (this session only)")
+
+# Email field (load if saved)
 email_user = st.text_input(
     "Your Email Address",
-    value=st.session_state.saved_email if st.session_state.saved_email else "",
-    placeholder="you@example.com"
+    placeholder="example@gmail.com",
+    value=st.session_state.saved_email if st.session_state.saved_email else ""
 )
 
+# App password field (session only)
 email_pass = st.text_input(
-    "App Password",
+    "App Password (NOT your regular password)",
     type="password",
     value=st.session_state.saved_pass if st.session_state.remember_pass_session else ""
 )
 
+st.info("For Gmail: Create an App Password at https://myaccount.google.com/apppasswords")
+
+# Save email if remembered
 if st.session_state.remember_email and email_user:
     st.session_state.saved_email = email_user
     st.experimental_set_query_params(email=email_user)
 
+# Save password only in session
 if st.session_state.remember_pass_session and email_pass:
     st.session_state.saved_pass = email_pass
 
-st.markdown("</div>", unsafe_allow_html=True)
-
 
 # -------------------------------------------------------
-# SECTION 2 — EMAIL CONTENT
+# EMAIL DETAILS
 # -------------------------------------------------------
-st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='subheader'>2. Email Content</div>", unsafe_allow_html=True)
+st.header("2. Email Details")
 
 subject = st.text_input("Email Subject")
 
-if "body_html" not in st.session_state: st.session_state.body_html = ""
-if "quill_initialized" not in st.session_state: st.session_state.quill_initialized = False
-
+st.markdown("### Email Body (Rich Text Editor)")
 editor_output = st_quill(
     value=st.session_state.body_html if not st.session_state.quill_initialized else "",
     html=True,
-    placeholder="Write your message here...",
+    placeholder="Write your email here...",
     key="MAIN_EDITOR"
 )
-
 st.session_state.quill_initialized = True
+
 if editor_output and editor_output != st.session_state.body_html:
     st.session_state.body_html = editor_output
 
-st.markdown("</div>", unsafe_allow_html=True)
-
 
 # -------------------------------------------------------
-# SECTION 3 — EXCEL
+# EXCEL UPLOAD
 # -------------------------------------------------------
-st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='subheader'>3. Upload Recipients</div>", unsafe_allow_html=True)
+st.header("3. Upload Recipient Excel File")
+uploaded_excel = st.file_uploader("Upload .xlsx file", type=["xlsx"])
 
-uploaded_excel = st.file_uploader("Upload .xlsx", type=["xlsx"])
-df, detected_fields = None, {}
+df = None
+detected_fields = {}
 
 if uploaded_excel:
-    df = pd.read_excel(uploaded_excel)
-    detected_fields = detect_columns(df)
-    st.success(f"Uploaded {len(df)} recipients.")
-    st.info(f"Detected fields: {detected_fields}")
-
-st.markdown("</div>", unsafe_allow_html=True)
+    try:
+        df = pd.read_excel(uploaded_excel)
+        detected_fields = detect_columns(df)
+        st.success(f"Excel uploaded — {len(df)} rows found.")
+        st.info(f"Detected fields: {detected_fields}")
+    except Exception as e:
+        st.error(f"Failed to read Excel: {e}")
 
 
 # -------------------------------------------------------
-# SECTION 4 — PREVIEW
+# PREVIEW
 # -------------------------------------------------------
-st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='subheader'>4. Preview</div>", unsafe_allow_html=True)
+st.header("4. Preview")
 
 if st.button("Show Preview"):
-    preview = st.session_state.body_html
-    if df is not None and len(df) > 0:
-        row = df.iloc[0]
-        for field, col in detected_fields.items():
-            preview = preview.replace(
-                f"{{{field}}}",
-                "" if pd.isna(row[col]) else str(row[col])
-            )
+    if not st.session_state.body_html.strip():
+        st.error("Email body is empty.")
+    else:
+        preview = st.session_state.body_html
 
-    st.markdown("<div class='preview-box'>", unsafe_allow_html=True)
-    st.markdown(preview, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+        if df is not None and len(df) > 0:
+            first = df.iloc[0]
+            for field, col in detected_fields.items():
+                preview = preview.replace(
+                    f"{{{field}}}",
+                    "" if pd.isna(first[col]) else str(first[col])
+                )
 
-st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("### Email Preview")
+        st.markdown(preview, unsafe_allow_html=True)
 
 
 # -------------------------------------------------------
-# SECTION 5 — ATTACHMENTS
+# ATTACHMENTS
 # -------------------------------------------------------
-st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='subheader'>5. Attachments</div>", unsafe_allow_html=True)
-
+st.header("5. Attachments (optional)")
 uploaded_files = st.file_uploader(
     "Upload attachments",
-    type=["pdf", "jpg", "jpeg", "png"],
+    type=["pdf", "jpeg", "jpg", "png"],
     accept_multiple_files=True
 )
-st.markdown("</div>", unsafe_allow_html=True)
 
 
 # -------------------------------------------------------
-# SECTION 6 — SEND EMAILS
+# SEND EMAILS
 # -------------------------------------------------------
-st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-st.markdown("<div class='subheader'>6. Send Emails</div>", unsafe_allow_html=True)
+st.header("6. Send Emails")
 
 if st.button("🚀 Send Now"):
     if df is None:
-        st.error("Upload an Excel file first.")
+        st.error("Please upload an Excel file.")
         st.stop()
+
     if "email" not in detected_fields:
         st.error("No email column detected.")
         st.stop()
+
     if not email_user or not email_pass:
-        st.error("Email + App Password is required.")
+        st.error("Email + App Password required.")
         st.stop()
+
     if not subject.strip():
         st.error("Subject cannot be empty.")
         st.stop()
+
     if not st.session_state.body_html.strip():
         st.error("Email body cannot be empty.")
         st.stop()
 
+    # Save attachments temporarily
     temp_paths = []
-    for f in uploaded_files:
-        ext = os.path.splitext(f.name)[1]
+    for file in uploaded_files:
+        ext = os.path.splitext(file.name)[1]
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
-        tmp.write(f.read())
+        tmp.write(file.read())
         tmp.close()
         temp_paths.append(tmp.name)
 
+    # Connect SMTP
     try:
         yag = yagmail.SMTP(email_user, email_pass)
     except Exception as e:
-        st.error(f"SMTP Login Failed → {e}")
+        st.error(f"SMTP Login Failed: {e}")
         st.stop()
 
     logs = []
     total = len(df)
     progress = st.progress(0)
+    count = 0
 
     email_col = detected_fields["email"]
 
     for idx, row in df.iterrows():
         body = st.session_state.body_html
+
         for field, col in detected_fields.items():
             body = body.replace(
                 f"{{{field}}}",
                 "" if pd.isna(row[col]) else str(row[col])
             )
 
-        addresses = re.split(r"[\/,; ]+", str(row[email_col]))
-        addresses = [a for a in addresses if "@" in a]
+        # Split multiple emails
+        raw_emails = re.split(r"[\/,; ]+", str(row[email_col]))
+        emails = [e for e in raw_emails if "@" in e]
 
-        for addr in addresses:
+        if not emails:
+            logs.append([idx, "", "NO_EMAIL", "SKIPPED", datetime.utcnow()])
+            count += 1
+            progress.progress(count / total)
+            continue
+
+        for email_addr in emails:
             try:
                 yag.send(
-                    to=addr,
+                    to=email_addr,
                     subject=subject,
                     contents=body,
                     attachments=temp_paths
                 )
-                logs.append([idx, addr, "SENT", "OK", datetime.utcnow()])
-            except Exception as e:
-                logs.append([idx, addr, "FAILED", str(e), datetime.utcnow()])
+                logs.append([idx, email_addr, "SENT", "OK", datetime.utcnow()])
+            except Exception as err:
+                logs.append([idx, email_addr, "FAILED", str(err), datetime.utcnow()])
 
-        progress.progress((idx+1)/total)
+        count += 1
+        progress.progress(count / total)
 
+    # EXPORT CLEAN EXCEL LOG
     excel_path, excel_name = export_logs_excel(logs)
-    st.success("Emails processed!")
 
+    st.success("All emails processed!")
     with open(excel_path, "rb") as f:
-        st.download_button("📥 Download Log File", f, file_name=excel_name)
+        st.download_button("📥 Download Logs (Excel)", f, file_name=excel_name)
 
-st.markdown("</div>", unsafe_allow_html=True)
+    # Cleanup temp files
+    for p in temp_paths:
+        try:
+            os.unlink(p)
+        except:
+            pass
+
