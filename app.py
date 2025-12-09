@@ -14,10 +14,13 @@ import openpyxl
 from openpyxl.styles import Font, Border, Side
 from openpyxl.utils import get_column_letter
 
+# -------------------------------------------------------
+# LOGGING TO EXCEL
+# -------------------------------------------------------
 def log_to_excel(recipient, status, details):
     log_filename = "email_logs.xlsx"
 
-    # if not exist, create workbook + headers
+    # Create file if missing
     if not os.path.exists(log_filename):
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -26,17 +29,16 @@ def log_to_excel(recipient, status, details):
         headers = ["Timestamp", "Recipient", "Status", "Details"]
         ws.append(headers)
 
-        # style headers
         for col in range(1, len(headers) + 1):
             ws.cell(row=1, column=col).font = Font(bold=True)
 
         wb.save(log_filename)
 
-    # open existing log
+    # Load existing file
     wb = openpyxl.load_workbook(log_filename)
     ws = wb.active
 
-    # append new row
+    # Append new row
     ws.append([
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         recipient,
@@ -44,7 +46,7 @@ def log_to_excel(recipient, status, details):
         details
     ])
 
-    # auto column width
+    # Auto column width
     for col in ws.columns:
         max_len = 0
         column = col[0].column
@@ -53,11 +55,13 @@ def log_to_excel(recipient, status, details):
                 max_len = max(max_len, len(str(cell.value)))
         ws.column_dimensions[get_column_letter(column)].width = max_len + 2
 
-    # add borders
-    thin = Border(left=Side(style="thin"),
-                  right=Side(style="thin"),
-                  top=Side(style="thin"),
-                  bottom=Side(style="thin"))
+    # Add borders
+    thin = Border(
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin")
+    )
 
     for row in ws.iter_rows():
         for cell in row:
@@ -95,50 +99,46 @@ def detect_columns(df):
     normalized_cols = {normalize(c): c for c in df.columns}
 
     for field, aliases in FIELD_MAP.items():
-
+        # Prioritize exact match for EMAIL
         if field == "email":
-            for norm_col, real_col in normalized_cols.items():
-                if norm_col == "email":
-                    detected[field] = real_col
+            for norm, real in normalized_cols.items():
+                if norm == "email":
+                    detected[field] = real
                     break
             if field in detected:
                 continue
 
+        # Fuzzy alias matching
         for alias in aliases:
             norm_alias = normalize(alias)
-            for norm_col, real_col in normalized_cols.items():
-                if norm_alias in norm_col or norm_col in norm_alias:
-                    detected[field] = real_col
+            for norm, real in normalized_cols.items():
+                if norm_alias in norm or norm in norm_alias:
+                    detected[field] = real
                     break
             if field in detected:
                 break
 
     return detected
 
-
 # -------------------------------------------------------
-# QUILL PREP
-# ensure session state keys exist BEFORE any reruns that may come from widgets below
+# QUILL SETUP
 # -------------------------------------------------------
 if "body_html" not in st.session_state:
-    st.session_state.body_html = ""  # persisted HTML content
+    st.session_state.body_html = ""
 
 if "quill_initialized" not in st.session_state:
-    st.session_state.quill_initialized = False  # whether we already passed initial value
-
+    st.session_state.quill_initialized = False
 
 # -------------------------------------------------------
-# EMAIL LOGIN (keep this early)
+# EMAIL LOGIN
 # -------------------------------------------------------
 st.header("1. Email Account Login")
 email_user = st.text_input("Your Email Address", placeholder="example@gmail.com")
-email_pass = st.text_input("App Password (NOT your normal password)", type="password")
-st.info("For Gmail: create an App Password at https://myaccount.google.com/apppasswords")
-
+email_pass = st.text_input("App Password (NOT your regular password)", type="password")
+st.info("For Gmail: Create an App Password at https://myaccount.google.com/apppasswords")
 
 # -------------------------------------------------------
-# 3) Email Details — render Quill BEFORE file uploader
-# This is IMPORTANT: Quill must mount before the uploader to avoid re-init races.
+# EMAIL DETAILS
 # -------------------------------------------------------
 st.header("2. Email Details")
 
@@ -146,35 +146,26 @@ subject = st.text_input("Email Subject")
 
 st.markdown("### Email Body (Rich Text Editor)")
 
-# --- Critical pattern:
-# 1) On first load, call st_quill with value=st.session_state.body_html
-# 2) On subsequent reruns, call st_quill WITHOUT the value parameter
-#    (calling with value=None or value="" after init breaks the editor)
-editor_output = None
 if not st.session_state.quill_initialized:
-    # first-time mounting: provide the saved HTML (may be empty)
     editor_output = st_quill(
         value=st.session_state.body_html,
         html=True,
-        placeholder="Write your email here... Use {name}, {company}, etc.",
+        placeholder="Write your email here...",
         key="MAIN_EDITOR"
     )
     st.session_state.quill_initialized = True
 else:
-    # subsequent renders: do NOT pass 'value' argument
     editor_output = st_quill(
         html=True,
-        placeholder="Write your email here... Use {name}, {company}, etc.",
+        placeholder="Write your email here...",
         key="MAIN_EDITOR"
     )
 
-# store only when editor gives us content (avoid overwriting with empty)
 if editor_output and editor_output != st.session_state.body_html:
     st.session_state.body_html = editor_output
 
-
 # -------------------------------------------------------
-# EXCEL UPLOAD (now safe to place after Quill)
+# EXCEL UPLOAD
 # -------------------------------------------------------
 st.header("3. Upload Recipient Excel File")
 uploaded_excel = st.file_uploader("Upload .xlsx file", type=["xlsx"])
@@ -186,38 +177,30 @@ if uploaded_excel:
     try:
         df = pd.read_excel(uploaded_excel)
         detected_fields = detect_columns(df)
-
-        st.success(f"Excel uploaded successfully — {len(df)} rows loaded.")
+        st.success(f"Excel uploaded — {len(df)} rows found.")
         st.info(f"Detected fields: {detected_fields}")
-
-        if "email" not in detected_fields:
-            st.error("No valid email field found. Fix headers in your Excel.")
     except Exception as e:
-        st.error(f"Failed to process Excel: {e}")
-
+        st.error(f"Failed to read Excel: {e}")
 
 # -------------------------------------------------------
-# PREVIEW (uses body_html which is stable)
+# PREVIEW
 # -------------------------------------------------------
 st.header("4. Preview")
 
 if st.button("Show Preview"):
     if not st.session_state.body_html.strip():
-        st.error("Please write the email body first.")
+        st.error("Email body is empty.")
     else:
         preview = st.session_state.body_html
 
         if df is not None and len(df) > 0:
             row = df.iloc[0]
-
             for field, col in detected_fields.items():
-                placeholder = f"{{{field}}}"
-                value = "" if pd.isna(row[col]) else str(row[col])
-                preview = preview.replace(placeholder, value)
+                preview = preview.replace(f"{{{field}}}",
+                                         "" if pd.isna(row[col]) else str(row[col]))
 
         st.markdown("### Email Preview")
         st.markdown(preview, unsafe_allow_html=True)
-
 
 # -------------------------------------------------------
 # ATTACHMENTS
@@ -228,7 +211,6 @@ uploaded_files = st.file_uploader(
     type=["pdf", "jpeg", "jpg", "png"],
     accept_multiple_files=True
 )
-
 
 # -------------------------------------------------------
 # SEND EMAILS
@@ -241,33 +223,29 @@ if st.button("🚀 Send Now"):
         st.stop()
 
     if "email" not in detected_fields:
-        st.error("No valid email column detected.")
+        st.error("No email column detected.")
         st.stop()
 
     if not email_user or not email_pass:
-        st.error("Email + App password required.")
+        st.error("Email + App Password required.")
         st.stop()
 
     if not subject.strip():
-        st.error("Subject required.")
+        st.error("Subject cannot be empty.")
         st.stop()
 
     if not st.session_state.body_html.strip():
-        st.error("Email body is empty.")
+        st.error("Email body cannot be empty.")
         st.stop()
 
-    # Save uploaded attachments
+    # Save attachments
     temp_paths = []
-    try:
-        for file in uploaded_files:
-            ext = os.path.splitext(file.name)[1]
-            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
-            tmp.write(file.read())
-            tmp.close()
-            temp_paths.append(tmp.name)
-    except Exception as e:
-        st.error("Attachment error.")
-        st.stop()
+    for file in uploaded_files:
+        ext = os.path.splitext(file.name)[1]
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+        tmp.write(file.read())
+        tmp.close()
+        temp_paths.append(tmp.name)
 
     # Connect SMTP
     try:
@@ -280,13 +258,15 @@ if st.button("🚀 Send Now"):
     total = len(df)
     progress = st.progress(0)
     count = 0
+
     email_col = detected_fields["email"]
 
     for idx, row in df.iterrows():
         body = st.session_state.body_html
 
         for field, col in detected_fields.items():
-            body = body.replace(f"{{{field}}}", "" if pd.isna(row[col]) else str(row[col]))
+            body = body.replace(f"{{{field}}}",
+                                "" if pd.isna(row[col]) else str(row[col]))
 
         raw_emails = re.split(r"[\/,; ]+", str(row[email_col]))
         emails = [e for e in raw_emails if "@" in e]
@@ -298,24 +278,23 @@ if st.button("🚀 Send Now"):
             continue
 
         for email_addr in emails:
-        try:
-        yag.send(
-            to=email_addr,
-            subject=subject,
-            contents=body,
-            attachments=temp_paths
-        )
-
-        logs.append([idx, email_addr, "SENT", "OK", datetime.utcnow()])
-        log_to_excel(email_addr, "SENT", "OK")   # <--- NEW Excel log
-    except Exception as err:
-        logs.append([idx, email_addr, "FAILED", str(err), datetime.utcnow()])
-        log_to_excel(email_addr, "FAILED", str(err))   # <--- NEW Excel log
+            try:
+                yag.send(
+                    to=email_addr,
+                    subject=subject,
+                    contents=body,
+                    attachments=temp_paths
+                )
+                logs.append([idx, email_addr, "SENT", "OK", datetime.utcnow()])
+                log_to_excel(email_addr, "SENT", "OK")
+            except Exception as err:
+                logs.append([idx, email_addr, "FAILED", str(err), datetime.utcnow()])
+                log_to_excel(email_addr, "FAILED", str(err))
 
         count += 1
         progress.progress(count / total)
 
-    # Save logs
+    # CSV log
     log_df = pd.DataFrame(logs, columns=["Row", "Email", "Status", "Details", "Timestamp"])
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"logs_{ts}.csv"
@@ -325,7 +304,7 @@ if st.button("🚀 Send Now"):
 
     # Cleanup temp
     for p in temp_paths:
-        try: os.unlink(p)
-        except: pass
-
-
+        try:
+            os.unlink(p)
+        except:
+            pass
