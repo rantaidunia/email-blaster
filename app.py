@@ -103,7 +103,7 @@ if uploaded_excel:
         st.error(f"Failed to load Excel: {e}")
 
 # ---------------------------
-# 3) Email Details + Quill editor (FIXED)
+# 3) Email Details + Quill editor (FINAL FIX)
 # ---------------------------
 st.header("3. Email Details")
 
@@ -111,25 +111,33 @@ subject = st.text_input("Email Subject")
 
 st.markdown("### Email Body (Rich Text Editor)")
 
-# Initialize once
+# Initialize only once the FIRST time Quill loads
 if "body_html" not in st.session_state:
     st.session_state.body_html = ""
+if "quill_loaded" not in st.session_state:
+    st.session_state.quill_loaded = False
 
-# Prevent Excel upload from resetting body
-initial_value = None
-if st.session_state.body_html:
-    initial_value = st.session_state.body_html
+# Only supply initial value ONCE — never again
+quill_initial_value = None
+if not st.session_state.quill_loaded:
+    quill_initial_value = st.session_state.body_html
 
+# Render Quill
 email_body_html = st_quill(
-    value=initial_value,   # <- do NOT overwrite on rerun
+    value=quill_initial_value,
     placeholder="Write your email here... Use {name}, {company}, etc.",
     html=True,
-    key="quill_body_editor"  # <- dedicated key so it's persistent
+    key="quill_body_editor"
 )
 
-# Update only when editor returns new content
+# Mark as loaded so next reruns do NOT reset the value
+if not st.session_state.quill_loaded:
+    st.session_state.quill_loaded = True
+
+# Store updated content
 if email_body_html and email_body_html != st.session_state.body_html:
     st.session_state.body_html = email_body_html
+
 
 # ---------------------------
 # 4) Preview
@@ -273,5 +281,6 @@ if st.button("🚀 Send Now"):
     for p in temp_paths:
         try: os.unlink(p)
         except: pass
+
 
 
