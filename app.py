@@ -10,6 +10,60 @@ import os
 from io import StringIO
 from streamlit_quill import st_quill
 from datetime import datetime
+import openpyxl
+from openpyxl.styles import Font, Border, Side
+from openpyxl.utils import get_column_letter
+
+def log_to_excel(recipient, status, details):
+    log_filename = "email_logs.xlsx"
+
+    # if not exist, create workbook + headers
+    if not os.path.exists(log_filename):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Logs"
+
+        headers = ["Timestamp", "Recipient", "Status", "Details"]
+        ws.append(headers)
+
+        # style headers
+        for col in range(1, len(headers) + 1):
+            ws.cell(row=1, column=col).font = Font(bold=True)
+
+        wb.save(log_filename)
+
+    # open existing log
+    wb = openpyxl.load_workbook(log_filename)
+    ws = wb.active
+
+    # append new row
+    ws.append([
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        recipient,
+        status,
+        details
+    ])
+
+    # auto column width
+    for col in ws.columns:
+        max_len = 0
+        column = col[0].column
+        for cell in col:
+            if cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[get_column_letter(column)].width = max_len + 2
+
+    # add borders
+    thin = Border(left=Side(style="thin"),
+                  right=Side(style="thin"),
+                  top=Side(style="thin"),
+                  bottom=Side(style="thin"))
+
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.border = thin
+
+    wb.save(log_filename)
 
 # -------------------------------------------------------
 # CONFIG
@@ -244,16 +298,19 @@ if st.button("🚀 Send Now"):
             continue
 
         for email_addr in emails:
-            try:
-                yag.send(
-                    to=email_addr,
-                    subject=subject,
-                    contents=body,
-                    attachments=temp_paths
-                )
-                logs.append([idx, email_addr, "SENT", "OK", datetime.utcnow()])
-            except Exception as err:
-                logs.append([idx, email_addr, "FAILED", str(err), datetime.utcnow()])
+    try:
+        yag.send(
+            to=email_addr,
+            subject=subject,
+            contents=body,
+            attachments=temp_paths
+        )
+
+        logs.append([idx, email_addr, "SENT", "OK", datetime.utcnow()])
+        log_to_excel(email_addr, "SENT", "OK")   # <--- NEW Excel log
+    except Exception as err:
+        logs.append([idx, email_addr, "FAILED", str(err), datetime.utcnow()])
+        log_to_excel(email_addr, "FAILED", str(err))   # <--- NEW Excel log
 
         count += 1
         progress.progress(count / total)
@@ -270,3 +327,4 @@ if st.button("🚀 Send Now"):
     for p in temp_paths:
         try: os.unlink(p)
         except: pass
+
