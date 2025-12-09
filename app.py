@@ -19,7 +19,7 @@ from datetime import datetime
 # ---------------------------
 st.set_page_config(page_title="Email Blaster", layout="wide")
 
-st.title("📧 Email Blasters")
+st.title("📧 Email Blaster")
 
 st.markdown(
     """
@@ -281,6 +281,7 @@ if st.button("🚀 Send Now"):
     for p in temp_paths:
         try: os.unlink(p)
         except: pass
+
 
 
 
