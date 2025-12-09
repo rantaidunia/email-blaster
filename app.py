@@ -298,7 +298,7 @@ if st.button("🚀 Send Now"):
             continue
 
         for email_addr in emails:
-try:
+        try:
         yag.send(
             to=email_addr,
             subject=subject,
@@ -327,4 +327,5 @@ try:
     for p in temp_paths:
         try: os.unlink(p)
         except: pass
+
 
