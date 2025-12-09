@@ -15,47 +15,29 @@ from openpyxl.styles import Font, Border, Side
 from openpyxl.utils import get_column_letter
 
 # -------------------------------------------------------
-# LOGGING TO EXCEL
+# EXCEL LOGGING FUNCTION (CLEAN FORMAT)
 # -------------------------------------------------------
-def log_to_excel(recipient, status, details):
-    log_filename = "email_logs.xlsx"
+def export_logs_excel(logs):
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"email_logs_{ts}.xlsx"
+    filepath = f"/tmp/{filename}"
 
-    # Create file if missing
-    if not os.path.exists(log_filename):
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Logs"
-
-        headers = ["Timestamp", "Recipient", "Status", "Details"]
-        ws.append(headers)
-
-        for col in range(1, len(headers) + 1):
-            ws.cell(row=1, column=col).font = Font(bold=True)
-
-        wb.save(log_filename)
-
-    # Load existing file
-    wb = openpyxl.load_workbook(log_filename)
+    wb = openpyxl.Workbook()
     ws = wb.active
+    ws.title = "Email Logs"
 
-    # Append new row
-    ws.append([
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        recipient,
-        status,
-        details
-    ])
+    headers = ["Row", "Email", "Status", "Details", "Timestamp"]
+    ws.append(headers)
 
-    # Auto column width
-    for col in ws.columns:
-        max_len = 0
-        column = col[0].column
-        for cell in col:
-            if cell.value:
-                max_len = max(max_len, len(str(cell.value)))
-        ws.column_dimensions[get_column_letter(column)].width = max_len + 2
+    # Bold headers
+    for col in range(1, len(headers) + 1):
+        ws.cell(row=1, column=col).font = Font(bold=True)
 
-    # Add borders
+    # Insert log rows
+    for row in logs:
+        ws.append(row)
+
+    # Borders and auto-width
     thin = Border(
         left=Side(style="thin"),
         right=Side(style="thin"),
@@ -67,13 +49,23 @@ def log_to_excel(recipient, status, details):
         for cell in row:
             cell.border = thin
 
-    wb.save(log_filename)
+    # Auto column width
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            if cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[col_letter].width = max_len + 2
+
+    wb.save(filepath)
+    return filepath, filename
+
 
 # -------------------------------------------------------
 # CONFIG
 # -------------------------------------------------------
 st.set_page_config(page_title="Email Blaster", layout="wide")
-
 st.title("📧 Email Blaster")
 
 st.markdown("""
@@ -99,8 +91,7 @@ def detect_columns(df):
     normalized_cols = {normalize(c): c for c in df.columns}
 
     for field, aliases in FIELD_MAP.items():
-        # Prioritize exact match for EMAIL
-        if field == "email":
+        if field == "email":  # hard match for email
             for norm, real in normalized_cols.items():
                 if norm == "email":
                     detected[field] = real
@@ -108,17 +99,17 @@ def detect_columns(df):
             if field in detected:
                 continue
 
-        # Fuzzy alias matching
         for alias in aliases:
-            norm_alias = normalize(alias)
+            alias_norm = normalize(alias)
             for norm, real in normalized_cols.items():
-                if norm_alias in norm or norm in norm_alias:
+                if alias_norm in norm or norm in alias_norm:
                     detected[field] = real
                     break
             if field in detected:
                 break
 
     return detected
+
 
 # -------------------------------------------------------
 # QUILL SETUP
@@ -145,21 +136,13 @@ st.header("2. Email Details")
 subject = st.text_input("Email Subject")
 
 st.markdown("### Email Body (Rich Text Editor)")
-
-if not st.session_state.quill_initialized:
-    editor_output = st_quill(
-        value=st.session_state.body_html,
-        html=True,
-        placeholder="Write your email here...",
-        key="MAIN_EDITOR"
-    )
-    st.session_state.quill_initialized = True
-else:
-    editor_output = st_quill(
-        html=True,
-        placeholder="Write your email here...",
-        key="MAIN_EDITOR"
-    )
+editor_output = st_quill(
+    value=st.session_state.body_html if not st.session_state.quill_initialized else "",
+    html=True,
+    placeholder="Write your email here...",
+    key="MAIN_EDITOR"
+)
+st.session_state.quill_initialized = True
 
 if editor_output and editor_output != st.session_state.body_html:
     st.session_state.body_html = editor_output
@@ -194,10 +177,10 @@ if st.button("Show Preview"):
         preview = st.session_state.body_html
 
         if df is not None and len(df) > 0:
-            row = df.iloc[0]
+            first = df.iloc[0]
             for field, col in detected_fields.items():
                 preview = preview.replace(f"{{{field}}}",
-                                         "" if pd.isna(row[col]) else str(row[col]))
+                                         "" if pd.isna(first[col]) else str(first[col]))
 
         st.markdown("### Email Preview")
         st.markdown(preview, unsafe_allow_html=True)
@@ -238,7 +221,7 @@ if st.button("🚀 Send Now"):
         st.error("Email body cannot be empty.")
         st.stop()
 
-    # Save attachments
+    # Save attachments temporarily
     temp_paths = []
     for file in uploaded_files:
         ext = os.path.splitext(file.name)[1]
@@ -268,11 +251,12 @@ if st.button("🚀 Send Now"):
             body = body.replace(f"{{{field}}}",
                                 "" if pd.isna(row[col]) else str(row[col]))
 
+        # Split multiple emails in a single row
         raw_emails = re.split(r"[\/,; ]+", str(row[email_col]))
         emails = [e for e in raw_emails if "@" in e]
 
         if not emails:
-            logs.append([idx, raw_emails, "NO_EMAIL", "SKIPPED", datetime.utcnow()])
+            logs.append([idx, "", "NO_EMAIL", "SKIPPED", datetime.utcnow()])
             count += 1
             progress.progress(count / total)
             continue
@@ -286,23 +270,22 @@ if st.button("🚀 Send Now"):
                     attachments=temp_paths
                 )
                 logs.append([idx, email_addr, "SENT", "OK", datetime.utcnow()])
-                log_to_excel(email_addr, "SENT", "OK")
             except Exception as err:
                 logs.append([idx, email_addr, "FAILED", str(err), datetime.utcnow()])
-                log_to_excel(email_addr, "FAILED", str(err))
 
         count += 1
         progress.progress(count / total)
 
-    # CSV log
-    log_df = pd.DataFrame(logs, columns=["Row", "Email", "Status", "Details", "Timestamp"])
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"logs_{ts}.csv"
+    # -------------------------------------------------------
+    # EXPORT CLEAN EXCEL LOG
+    # -------------------------------------------------------
+    excel_path, excel_name = export_logs_excel(logs)
 
     st.success("All emails processed!")
-    st.download_button("📥 Download Logs", log_df.to_csv(index=False), filename, "text/csv")
+    with open(excel_path, "rb") as f:
+        st.download_button("📥 Download Logs (Excel)", f, file_name=excel_name)
 
-    # Cleanup temp
+    # Cleanup temp files
     for p in temp_paths:
         try:
             os.unlink(p)
