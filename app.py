@@ -186,6 +186,11 @@ def set_png_as_page_bg(png_file):
     [data-testid="stStatusWidget"] {{display: none !important;}}
     [data-testid="stHeader"] {{display: none !important;}}
     .stDeployButton {{display: none !important;}}
+    
+    /* Hide Streamlit Cloud specific elements (Viewer Badge, Deploy Button) */
+    div[class*="viewerBadge"] {{display: none !important;}}
+    div[class*="stAppDeployButton"] {{display: none !important;}}
+    button[title="View app source"] {{display: none !important;}}
 
     /* Mobile Responsiveness */
     @media (max-width: 768px) {{
