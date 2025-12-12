@@ -186,6 +186,19 @@ def set_png_as_page_bg(png_file):
     [data-testid="stStatusWidget"] {{display: none !important;}}
     [data-testid="stHeader"] {{display: none !important;}}
     .stDeployButton {{display: none !important;}}
+
+    /* Mobile Responsiveness */
+    @media (max-width: 768px) {{
+        .block-container {{
+            padding: 1.5rem;
+            margin: 2rem auto;
+            width: 92%;
+            max-width: 100%;
+        }}
+        h1 {{
+            font-size: 1.8rem;
+        }}
+    }}
     </style>
     '''
     st.markdown(page_bg_img, unsafe_allow_html=True)
