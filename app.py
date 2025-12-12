@@ -175,6 +175,14 @@ def set_png_as_page_bg(png_file):
         padding-top: 2rem;
         padding-bottom: 2rem;
     }}
+
+    /* Hide Streamlit Footer and Header */
+    footer {{
+        visibility: hidden;
+    }}
+    header {{
+        visibility: hidden;
+    }}
     </style>
     '''
     st.markdown(page_bg_img, unsafe_allow_html=True)
