@@ -7,6 +7,7 @@ import yagmail
 import re
 import tempfile
 import os
+import base64
 from io import StringIO
 from streamlit_quill import st_quill
 from datetime import datetime
@@ -63,9 +64,126 @@ def export_logs_excel(logs):
 
 
 # -------------------------------------------------------
-# CONFIG
+# CONFIG & STYLING
 # -------------------------------------------------------
-st.set_page_config(page_title="Email Blaster", layout="wide")
+st.set_page_config(page_title="Email Blaster", layout="centered")
+
+def get_base64_of_bin_file(bin_file):
+    with open(bin_file, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+def set_png_as_page_bg(png_file):
+    bin_str = get_base64_of_bin_file(png_file)
+    page_bg_img = f'''
+    <style>
+    .stApp {{
+        background-image: url("data:image/jpg;base64,{bin_str}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+    
+    /* Card Container - Floating Effect */
+    .block-container {{
+        background-color: rgba(255, 255, 255, 0.95);
+        padding: 2rem; /* Reduced padding */
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        margin: 3rem auto; /* Reduced vertical spacing */
+        max-width: 800px;
+    }}
+
+    /* Force Dark Text for Visibility */
+    h1, h2, h3, h4, h5, h6, p, label, li, span, div {{
+        color: #2c3e50 !important;
+    }}
+    
+    /* Input Fields */
+    .stTextInput > div > div > input {{
+        background-color: #f8f9fa;
+        border: 1px solid #ced4da;
+        border-radius: 8px;
+        color: #495057 !important;
+    }}
+    .stTextInput > div > div > input:focus {{
+        border-color: #4dabf7;
+        box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.2);
+    }}
+
+    /* File Uploader Styling */
+    [data-testid='stFileUploader'] {{
+        background-color: #f1f3f5;
+        border: 2px dashed #ced4da;
+        border-radius: 10px;
+        padding: 1rem;
+        transition: border-color 0.3s;
+    }}
+    [data-testid='stFileUploader']:hover {{
+        border-color: #4dabf7;
+    }}
+    [data-testid='stFileUploader'] section {{
+        background-color: transparent !important;
+    }}
+    [data-testid='stFileUploader'] button {{
+        background-color: #ffffff !important;
+        color: #3b82f6 !important;
+        border: 1px solid #3b82f6 !important;
+    }}
+    [data-testid='stFileUploader'] button:hover {{
+        background-color: #eff6ff !important;
+    }}
+    /* Fix text inside uploader */
+    [data-testid='stFileUploader'] small, [data-testid='stFileUploader'] span {{
+        color: #6c757d !important;
+    }}
+
+    /* Buttons */
+    .stButton > button {{
+        background-color: #3b82f6;
+        color: white !important;
+        border-radius: 8px;
+        border: none;
+        padding: 0.6rem 1.2rem;
+        font-weight: 600;
+        width: 100%;
+        transition: all 0.3s ease;
+    }}
+    .stButton > button:hover {{
+        background-color: #2563eb;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        transform: translateY(-1px);
+    }}
+    
+    /* Headers specific styling */
+    h1 {{
+        font-weight: 800;
+        color: #1a202c !important;
+        margin-bottom: 1.5rem;
+    }}
+    
+    h2 {{
+        font-weight: 600;
+        margin-top: 2rem;
+        border-bottom: 2px solid #f0f0f0;
+        padding-bottom: 0.5rem;
+    }}
+
+    /* Fix for Streamlit's default top padding */
+    .main .block-container {{
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }}
+    </style>
+    '''
+    st.markdown(page_bg_img, unsafe_allow_html=True)
+
+try:
+    set_png_as_page_bg('UIDBC.jpg')
+except Exception as e:
+    st.warning(f"Could not load background image: {e}")
+
 st.title("📧 Email Blaster")
 
 st.markdown("""
@@ -92,9 +210,9 @@ if "remember_pass_session" not in st.session_state:
     st.session_state.remember_pass_session = False
 
 # Load email from browser URL params
-query_params = st.experimental_get_query_params()
-if "email" in query_params and st.session_state.saved_email is None:
-    st.session_state.saved_email = query_params["email"][0]
+# UPDATED: Use st.query_params instead of experimental_get_query_params
+if "email" in st.query_params and st.session_state.saved_email is None:
+    st.session_state.saved_email = st.query_params["email"]
 
 
 # -------------------------------------------------------
@@ -175,7 +293,7 @@ st.info("For Gmail: Create an App Password at https://myaccount.google.com/apppa
 # Save email if remembered
 if st.session_state.remember_email and email_user:
     st.session_state.saved_email = email_user
-    st.experimental_set_query_params(email=email_user)
+    st.query_params["email"] = email_user
 
 # Save password only in session
 if st.session_state.remember_pass_session and email_pass:
