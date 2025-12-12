@@ -218,7 +218,7 @@ def set_png_as_page_bg(png_file):
         width: 100%;
         height: 40px;
         background: white;
-        z-index: 999999;
+        z-index: 2147483647; /* Max z-index */
         display: flex;
         align-items: center;
         justify-content: center;
@@ -226,10 +226,22 @@ def set_png_as_page_bg(png_file):
         font-size: 0.8rem;
         box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
     }}
+    
+    /* Corner Blocker for stubborn icons */
+    .corner-blocker {{
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        width: 200px;
+        height: 50px;
+        background: white;
+        z-index: 2147483647;
+    }}
     </style>
     <div class="footer-cover">
         &copy; 2025 Email Blaster. All rights reserved.
     </div>
+    <div class="corner-blocker"></div>
     '''
     st.markdown(page_bg_img, unsafe_allow_html=True)
 
