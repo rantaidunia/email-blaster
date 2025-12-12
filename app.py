@@ -114,12 +114,10 @@ def detect_columns(df):
     detected = {}
     normalized_cols = {normalize(c): c for c in df.columns}
 
-    # Temporary storage for multi-matches
-    col_matches = {c: [] for c in df.columns}
-
-    # 1) ORIGINAL MATCHING (unchanged)
     for field, aliases in FIELD_MAP.items():
-        if field == "email":  # hard match for email
+
+        # Hard match for email
+        if field == "email":
             for norm, real in normalized_cols.items():
                 if norm == "email":
                     detected[field] = real
@@ -127,37 +125,17 @@ def detect_columns(df):
             if field in detected:
                 continue
 
+        # Alias matching
         for alias in aliases:
             alias_norm = normalize(alias)
             for norm, real in normalized_cols.items():
                 if alias_norm in norm or norm in alias_norm:
-                    col_matches[real].append(field)
-
-    # 2) FIX "nama perusahaan" BUG
-    # Resolve conflicts with a priority system
-    priority = ["email", "name", "position", "company"]
-
-    final_detected = {}
-
-    for col, matched_fields in col_matches.items():
-        if not matched_fields:
-            continue
-
-        # If multiple fields match, choose the highest-priority one
-        if len(matched_fields) > 1:
-            best = None
-            for f in priority:
-                if f in matched_fields:
-                    best = f
+                    detected[field] = real
                     break
-            if best:
-                final_detected[best] = col
-        else:
-            final_detected[matched_fields[0]] = col
+            if field in detected:
+                break
 
-    return final_detected
-
-
+    return detected
 
 # -------------------------------------------------------
 # QUILL SETUP
@@ -373,6 +351,7 @@ if st.button("🚀 Send Now"):
             os.unlink(p)
         except:
             pass
+
 
 
 
