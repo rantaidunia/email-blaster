@@ -112,43 +112,51 @@ def normalize(text):
 
 def detect_columns(df):
     detected = {}
+    normalized_cols = {normalize(c): c for c in df.columns}
 
-    # Reverse alias → field mapping (token-based)
-    alias_map = {}
+    # Temporary storage for multi-matches
+    col_matches = {c: [] for c in df.columns}
+
+    # 1) ORIGINAL MATCHING (unchanged)
     for field, aliases in FIELD_MAP.items():
-        for a in aliases:
-            alias_map[normalize(a)] = field
+        if field == "email":  # hard match for email
+            for norm, real in normalized_cols.items():
+                if norm == "email":
+                    detected[field] = real
+                    break
+            if field in detected:
+                continue
 
-    for col in df.columns:
-        norm = normalize(col)
+        for alias in aliases:
+            alias_norm = normalize(alias)
+            for norm, real in normalized_cols.items():
+                if alias_norm in norm or norm in alias_norm:
+                    col_matches[real].append(field)
 
-        # Tokenize column header (split by space, dash, underscore)
-        tokens = re.split(r"[\s\-_]+", col.lower())
+    # 2) FIX "nama perusahaan" BUG
+    # Resolve conflicts with a priority system
+    priority = ["email", "name", "position", "company"]
 
-        matched_fields = set()
+    final_detected = {}
 
-        # 1) Check full exact alias match first
-        if norm in alias_map:
-            matched_fields.add(alias_map[norm])
+    for col, matched_fields in col_matches.items():
+        if not matched_fields:
+            continue
 
-        # 2) Token-level matching (strict)
-        for t in tokens:
-            t_norm = normalize(t)
-            if t_norm in alias_map:
-                matched_fields.add(alias_map[t_norm])
+        # If multiple fields match, choose the highest-priority one
+        if len(matched_fields) > 1:
+            best = None
+            for f in priority:
+                if f in matched_fields:
+                    best = f
+                    break
+            if best:
+                final_detected[best] = col
+        else:
+            final_detected[matched_fields[0]] = col
 
-        # 3) Special rule: email must be exact
-        if "email" in matched_fields and norm != "email":
-            matched_fields.remove("email")
+    return final_detected
 
-        # 4) Fix ambiguous conflicts → skip assignment
-        # e.g., ["name", "company"] → ambiguous
-        if len(matched_fields) == 1:
-            field = list(matched_fields)[0]
-            if field not in detected:  # first match wins
-                detected[field] = col
-
-    return detected
 
 
 # -------------------------------------------------------
@@ -365,5 +373,6 @@ if st.button("🚀 Send Now"):
             os.unlink(p)
         except:
             pass
+
 
 
