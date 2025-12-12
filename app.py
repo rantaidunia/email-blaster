@@ -318,7 +318,7 @@ st.header("2. Email Details")
 
 subject = st.text_input("Email Subject")
 
-st.markdown("### Email Body (Rich Text Editor)")
+st.markdown("### Email Body")
 editor_output = st_quill(
     value=st.session_state.body_html if not st.session_state.quill_initialized else "",
     html=True,
