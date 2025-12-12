@@ -191,6 +191,11 @@ def set_png_as_page_bg(png_file):
     div[class*="viewerBadge"] {{display: none !important;}}
     div[class*="stAppDeployButton"] {{display: none !important;}}
     button[title="View app source"] {{display: none !important;}}
+    
+    /* Additional Hiding for persistent icons */
+    [data-testid="stStatusWidget"] * {{display: none !important;}}
+    [class*="StatusWidget"] {{display: none !important;}}
+    [data-testid="manage-app-button"] {{display: none !important;}}
 
     /* Mobile Responsiveness */
     @media (max-width: 768px) {{
