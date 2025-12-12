@@ -210,65 +210,9 @@ def set_png_as_page_bg(png_file):
             font-size: 1.8rem;
         }}
     }}
-    
-    /* Cover-up Footer */
-    .footer-cover {{
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 40px;
-        background: white;
-        z-index: 2147483647;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #666;
-        font-size: 0.8rem;
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-    }}
     </style>
-    <div class="footer-cover">
-        &copy; 2025 Email Blaster. All rights reserved.
-    </div>
-    <div class="footer-cover">
-        &copy; 2025 Email Blaster. All rights reserved.
-    </div>
     '''
     st.markdown(page_bg_img, unsafe_allow_html=True)
-
-    # Inject JS to hide branding (Streamlit Cloud workaround)
-    components.html("""
-    <script>
-    const hideBranding = () => {
-        const selectors = [
-            '#MainMenu', 'footer', 'header', 
-            '[data-testid="stToolbar"]', '.stDeployButton', 
-            '[data-testid="stDecoration"]', '[data-testid="stStatusWidget"]',
-            'div[class*="viewerBadge"]', 'div[class*="stAppDeployButton"]',
-            'button[title="View app source"]',
-            '[data-testid="manage-app-button"]'
-        ];
-        
-        const hide = (doc) => {
-            if (!doc) return;
-            selectors.forEach(s => {
-                try {
-                    const elements = doc.querySelectorAll(s);
-                    elements.forEach(el => el.style.display = 'none');
-                } catch (e) {}
-            });
-        };
-
-        hide(document);
-        if (window.parent && window.parent.document) hide(window.parent.document);
-        if (window.parent.parent && window.parent.parent.document) hide(window.parent.parent.document);
-    };
-    
-    // Run repeatedly to catch elements as they load
-    setInterval(hideBranding, 500);
-    </script>
-    """, height=0)
 
 try:
     set_png_as_page_bg('UIDBC.jpg')
