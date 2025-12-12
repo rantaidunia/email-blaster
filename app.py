@@ -14,6 +14,7 @@ from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, Border, Side
 from openpyxl.utils import get_column_letter
+import streamlit.components.v1 as components
 
 # -------------------------------------------------------
 # EXCEL LOGGING FUNCTION (CLEAN FORMAT)
@@ -230,44 +231,44 @@ def set_png_as_page_bg(png_file):
     <div class="footer-cover">
         &copy; 2025 Email Blaster. All rights reserved.
     </div>
-    <script>
-    function hideStreamlitBranding() {{
-        try {{
-            var selectors = [
-                '#MainMenu',
-                'footer',
-                'header',
-                '[data-testid="stToolbar"]',
-                '.stDeployButton',
-                '[data-testid="stDecoration"]',
-                '[data-testid="stStatusWidget"]',
-                'div[class*="viewerBadge"]',
-                'div[class*="stAppDeployButton"]',
-                'button[title="View app source"]'
-            ];
-            
-            // Try hiding in current document
-            selectors.forEach(function(s) {{
-                var elements = document.querySelectorAll(s);
-                elements.forEach(function(el) {{ el.style.display = 'none'; }});
-            }});
-
-            // Try hiding in parent document (for Streamlit Cloud)
-            if (window.parent && window.parent.document) {{
-                selectors.forEach(function(s) {{
-                    var elements = window.parent.document.querySelectorAll(s);
-                    elements.forEach(function(el) {{ el.style.display = 'none'; }});
-                }});
-            }}
-        }} catch (e) {{
-            console.log("Could not hide branding:", e);
-        }}
-    }}
-    // Run repeatedly to catch elements as they load
-    setInterval(hideStreamlitBranding, 100);
-    </script>
+    <div class="footer-cover">
+        &copy; 2025 Email Blaster. All rights reserved.
+    </div>
     '''
     st.markdown(page_bg_img, unsafe_allow_html=True)
+
+    # Inject JS to hide branding (Streamlit Cloud workaround)
+    components.html("""
+    <script>
+    const hideBranding = () => {
+        const selectors = [
+            '#MainMenu', 'footer', 'header', 
+            '[data-testid="stToolbar"]', '.stDeployButton', 
+            '[data-testid="stDecoration"]', '[data-testid="stStatusWidget"]',
+            'div[class*="viewerBadge"]', 'div[class*="stAppDeployButton"]',
+            'button[title="View app source"]',
+            '[data-testid="manage-app-button"]'
+        ];
+        
+        const hide = (doc) => {
+            if (!doc) return;
+            selectors.forEach(s => {
+                try {
+                    const elements = doc.querySelectorAll(s);
+                    elements.forEach(el => el.style.display = 'none');
+                } catch (e) {}
+            });
+        };
+
+        hide(document);
+        if (window.parent && window.parent.document) hide(window.parent.document);
+        if (window.parent.parent && window.parent.parent.document) hide(window.parent.parent.document);
+    };
+    
+    // Run repeatedly to catch elements as they load
+    setInterval(hideBranding, 500);
+    </script>
+    """, height=0)
 
 try:
     set_png_as_page_bg('UIDBC.jpg')
