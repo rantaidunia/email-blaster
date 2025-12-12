@@ -177,14 +177,15 @@ def set_png_as_page_bg(png_file):
     }}
 
     /* Hide Streamlit Branding (Footer, Header, Toolbar, etc.) */
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-    header {{visibility: hidden;}}
-    [data-testid="stToolbar"] {{visibility: hidden !important;}}
-    [data-testid="stDecoration"] {{visibility: hidden !important;}}
-    [data-testid="stFooter"] {{visibility: hidden !important;}}
-    [data-testid="stStatusWidget"] {{visibility: hidden !important;}}
-    .stDeployButton {{display:none;}}
+    #MainMenu {{display: none !important;}}
+    footer {{display: none !important;}}
+    header {{display: none !important;}}
+    [data-testid="stToolbar"] {{display: none !important;}}
+    [data-testid="stDecoration"] {{display: none !important;}}
+    [data-testid="stFooter"] {{display: none !important;}}
+    [data-testid="stStatusWidget"] {{display: none !important;}}
+    [data-testid="stHeader"] {{display: none !important;}}
+    .stDeployButton {{display: none !important;}}
     </style>
     '''
     st.markdown(page_bg_img, unsafe_allow_html=True)
