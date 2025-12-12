@@ -218,7 +218,7 @@ def set_png_as_page_bg(png_file):
         width: 100%;
         height: 40px;
         background: white;
-        z-index: 2147483647; /* Max z-index */
+        z-index: 2147483647;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -226,22 +226,46 @@ def set_png_as_page_bg(png_file):
         font-size: 0.8rem;
         box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
     }}
-    
-    /* Corner Blocker for stubborn icons */
-    .corner-blocker {{
-        position: fixed;
-        bottom: 0;
-        right: 0;
-        width: 200px;
-        height: 50px;
-        background: white;
-        z-index: 2147483647;
-    }}
     </style>
     <div class="footer-cover">
         &copy; 2025 Email Blaster. All rights reserved.
     </div>
-    <div class="corner-blocker"></div>
+    <script>
+    function hideStreamlitBranding() {{
+        try {{
+            var selectors = [
+                '#MainMenu',
+                'footer',
+                'header',
+                '[data-testid="stToolbar"]',
+                '.stDeployButton',
+                '[data-testid="stDecoration"]',
+                '[data-testid="stStatusWidget"]',
+                'div[class*="viewerBadge"]',
+                'div[class*="stAppDeployButton"]',
+                'button[title="View app source"]'
+            ];
+            
+            // Try hiding in current document
+            selectors.forEach(function(s) {{
+                var elements = document.querySelectorAll(s);
+                elements.forEach(function(el) {{ el.style.display = 'none'; }});
+            }});
+
+            // Try hiding in parent document (for Streamlit Cloud)
+            if (window.parent && window.parent.document) {{
+                selectors.forEach(function(s) {{
+                    var elements = window.parent.document.querySelectorAll(s);
+                    elements.forEach(function(el) {{ el.style.display = 'none'; }});
+                }});
+            }}
+        }} catch (e) {{
+            console.log("Could not hide branding:", e);
+        }}
+    }}
+    // Run repeatedly to catch elements as they load
+    setInterval(hideStreamlitBranding, 100);
+    </script>
     '''
     st.markdown(page_bg_img, unsafe_allow_html=True)
 
