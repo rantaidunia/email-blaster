@@ -16,9 +16,8 @@ from openpyxl.styles import Font, Border, Side
 from openpyxl.utils import get_column_letter
 import streamlit.components.v1 as components
 
-# -------------------------------------------------------
 # EXCEL LOGGING FUNCTION (CLEAN FORMAT)
-# -------------------------------------------------------
+
 def export_logs_excel(logs):
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"email_logs_{ts}.xlsx"
@@ -63,10 +62,8 @@ def export_logs_excel(logs):
     wb.save(filepath)
     return filepath, filename
 
-
-# -------------------------------------------------------
 # CONFIG & STYLING
-# -------------------------------------------------------
+
 st.set_page_config(page_title="Email Blaster", layout="centered")
 
 def get_base64_of_bin_file(bin_file):
@@ -226,10 +223,7 @@ Upload an Excel (.xlsx) with an **email** column.
 Use placeholders like `{name}`, `{position}`, `{company}`, etc.
 """)
 
-
-# -------------------------------------------------------
 # REMEMBER ME SYSTEM (Option B)
-# -------------------------------------------------------
 
 # Initialize states
 if "saved_email" not in st.session_state:
@@ -249,10 +243,8 @@ if "remember_pass_session" not in st.session_state:
 if "email" in st.query_params and st.session_state.saved_email is None:
     st.session_state.saved_email = st.query_params["email"]
 
-
-# -------------------------------------------------------
 # FIELD DETECTION
-# -------------------------------------------------------
+
 FIELD_MAP = {
     "email": ["email", "mail", "e-mail", "emailaddress", "emailid"],
     "name": ["name", "fullname", "full name", "nama", "nama lengkap"],
@@ -290,19 +282,16 @@ def detect_columns(df):
 
     return detected
 
-# -------------------------------------------------------
 # QUILL SETUP
-# -------------------------------------------------------
+
 if "body_html" not in st.session_state:
     st.session_state.body_html = ""
 
 if "quill_initialized" not in st.session_state:
     st.session_state.quill_initialized = False
 
-
-# -------------------------------------------------------
 # EMAIL LOGIN
-# -------------------------------------------------------
+
 st.header("1. Email Account Login")
 
 # Remember Me checkboxes
@@ -334,10 +323,8 @@ if st.session_state.remember_email and email_user:
 if st.session_state.remember_pass_session and email_pass:
     st.session_state.saved_pass = email_pass
 
-
-# -------------------------------------------------------
 # EMAIL DETAILS
-# -------------------------------------------------------
+
 st.header("2. Email Details")
 
 subject = st.text_input("Email Subject")
@@ -354,10 +341,8 @@ st.session_state.quill_initialized = True
 if editor_output and editor_output != st.session_state.body_html:
     st.session_state.body_html = editor_output
 
-
-# -------------------------------------------------------
 # EXCEL UPLOAD
-# -------------------------------------------------------
+
 st.header("3. Upload Recipient Excel File")
 uploaded_excel = st.file_uploader("Upload .xlsx file", type=["xlsx"])
 
@@ -373,10 +358,8 @@ if uploaded_excel:
     except Exception as e:
         st.error(f"Failed to read Excel: {e}")
 
-
-# -------------------------------------------------------
 # PREVIEW
-# -------------------------------------------------------
+
 st.header("4. Preview")
 
 if st.button("Show Preview"):
@@ -396,10 +379,8 @@ if st.button("Show Preview"):
         st.markdown("### Email Preview")
         st.markdown(preview, unsafe_allow_html=True)
 
-
-# -------------------------------------------------------
 # ATTACHMENTS
-# -------------------------------------------------------
+
 st.header("5. Attachments (optional)")
 uploaded_files = st.file_uploader(
     "Upload attachments",
@@ -407,10 +388,8 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
-
-# -------------------------------------------------------
 # SEND EMAILS
-# -------------------------------------------------------
+
 st.header("6. Send Emails")
 
 if st.button("🚀 Send Now"):
