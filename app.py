@@ -415,12 +415,15 @@ if st.button("🚀 Send Now"):
 
     # Save attachments temporarily
     temp_paths = []
-    for file in uploaded_files:
-        ext = os.path.splitext(file.name)[1]
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
-        tmp.write(file.read())
-        tmp.close()
-        temp_paths.append(tmp.name)
+
+for file in uploaded_files:
+    temp_dir = tempfile.gettempdir()
+    temp_path = os.path.join(temp_dir, file.name)
+
+    with open(temp_path, "wb") as f:
+        f.write(file.read())
+
+    temp_paths.append(temp_path)
 
     # Connect SMTP
     try:
@@ -483,3 +486,4 @@ if st.button("🚀 Send Now"):
             os.unlink(p)
         except:
             pass
+
