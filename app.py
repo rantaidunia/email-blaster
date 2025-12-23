@@ -224,7 +224,7 @@ Upload an Excel (.xlsx) with an **email** column.
 Use placeholders like `{name}`, `{position}`, `{company}`, etc.
 """)
 
-# REMEMBER ME SYSTEM
+# REMEMBER ME SYSTEM (Option B)
 
 # Initialize states
 if "saved_email" not in st.session_state:
@@ -417,7 +417,7 @@ if st.button("🚀 Send Now"):
     # Save attachments temporarily
     temp_dir = tempfile.mkdtemp()
     temp_paths = []
-    
+
     for file in uploaded_files:
         file_path = os.path.join(temp_dir, file.name)
         with open(file_path, "wb") as f:
