@@ -121,28 +121,44 @@ def set_png_as_page_bg(png_file):
         box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.2) !important;
     }}
 
-    /* Expander Styling */
-    .streamlit-expanderHeader {{
+    /* Expander Styling - Robust Selector */
+    [data-testid="stExpander"] details {
+        border-color: #ced4da !important;
+        border-radius: 8px !important;
         background-color: #f1f3f5 !important;
         color: #2c3e50 !important;
-        border-radius: 8px !important;
-        border: 1px solid #ced4da !important;
-    }}
-    .streamlit-expanderContent {{
-        background-color: white !important;
-        border: 1px solid #ced4da !important;
-        border-top: none !important;
-        border-bottom-left-radius: 8px !important;
-        border-bottom-right-radius: 8px !important;
-        padding: 1rem !important;
-    }}
+    }
     
-    /* Number Input +/- Buttons */
-    button[kind="secondary"] {{
-        background-color: transparent !important;
-        border: none !important;
-        color: #6c757d !important;
-    }}
+    [data-testid="stExpander"] details summary {
+        background-color: #f1f3f5 !important;
+        color: #2c3e50 !important;
+        border-bottom: 1px solid #ced4da !important;
+    }
+    
+    [data-testid="stExpander"] details summary:hover {
+        color: #3b82f6 !important;
+    }
+
+    [data-testid="stExpander"] div[role="group"] {
+        background-color: white !important;
+        color: #2c3e50 !important;
+    }
+
+    /* Force text inside expander to be dark */
+    [data-testid="stExpander"] * {
+        color: #2c3e50 !important;
+    }
+    
+    /* Number Input Buttons (Spinbutton) */
+    div[data-baseweb="spinbutton"] div[role="button"] {
+        background-color: #e9ecef !important;
+        color: #495057 !important;
+    }
+    
+    /* Icons inside the +/- buttons */
+    div[data-baseweb="spinbutton"] svg {
+        fill: #495057 !important;
+    }
 
     /* File Uploader Styling */
     [data-testid='stFileUploader'] {{
