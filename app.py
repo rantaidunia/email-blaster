@@ -101,14 +101,16 @@ def set_png_as_page_bg(png_file):
         color: #2c3e50 !important;
     }}
     
-    /* Input Fields */
-    .stTextInput > div > div > input {{
+    /* Input Fields (Text & Number) */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input {{
         background-color: #f8f9fa;
         border: 1px solid #ced4da;
         border-radius: 8px;
         color: #495057 !important;
     }}
-    .stTextInput > div > div > input:focus {{
+    .stTextInput > div > div > input:focus,
+    .stNumberInput > div > div > input:focus {{
         border-color: #4dabf7;
         box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.2);
     }}
