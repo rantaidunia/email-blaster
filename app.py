@@ -15,6 +15,8 @@ import openpyxl
 from openpyxl.styles import Font, Border, Side
 from openpyxl.utils import get_column_letter
 import shutil
+import time
+import random
 import streamlit.components.v1 as components
 
 # EXCEL LOGGING FUNCTION (CLEAN FORMAT)
@@ -393,6 +395,12 @@ uploaded_files = st.file_uploader(
 
 st.header("6. Send Emails")
 
+with st.expander("⚙️ Safety & Rate Limiting", expanded=True):
+    st.write("Add a delay between emails to avoid getting blocked by Google.")
+    c1, c2 = st.columns(2)
+    min_d = c1.number_input("Min Delay (sec)", 1, 60, 5)
+    max_d = c2.number_input("Max Delay (sec)", 1, 60, 15)
+
 if st.button("🚀 Send Now"):
     if df is None:
         st.error("Please upload an Excel file.")
@@ -458,6 +466,10 @@ if st.button("🚀 Send Now"):
             continue
 
         for email_addr in emails:
+            # Rate limiting
+            delay = random.uniform(min_d, max_d)
+            time.sleep(delay)
+
             try:
                 yag.send(
                     to=email_addr,
