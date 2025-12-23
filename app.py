@@ -101,18 +101,47 @@ def set_png_as_page_bg(png_file):
         color: #2c3e50 !important;
     }}
     
-    /* Input Fields (Text & Number) */
-    .stTextInput > div > div > input,
-    .stNumberInput > div > div > input {{
-        background-color: #f8f9fa;
-        border: 1px solid #ced4da;
-        border-radius: 8px;
+    /* Input Fields (Text & Number) - Strict Override */
+    .stTextInput input, .stNumberInput input {{
+        background-color: #f8f9fa !important;
         color: #495057 !important;
     }}
-    .stTextInput > div > div > input:focus,
-    .stNumberInput > div > div > input:focus {{
-        border-color: #4dabf7;
-        box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.2);
+    
+    /* Input Containers */
+    div[data-baseweb="input"] {{
+        background-color: #f8f9fa !important;
+        border: 1px solid #ced4da !important;
+        border-radius: 8px !important;
+        color: #495057 !important;
+    }}
+    
+    /* Remove default focus border to use our own */
+    div[data-baseweb="input"]:focus-within {{
+        border-color: #4dabf7 !important;
+        box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.2) !important;
+    }}
+
+    /* Expander Styling */
+    .streamlit-expanderHeader {{
+        background-color: #f1f3f5 !important;
+        color: #2c3e50 !important;
+        border-radius: 8px !important;
+        border: 1px solid #ced4da !important;
+    }}
+    .streamlit-expanderContent {{
+        background-color: white !important;
+        border: 1px solid #ced4da !important;
+        border-top: none !important;
+        border-bottom-left-radius: 8px !important;
+        border-bottom-right-radius: 8px !important;
+        padding: 1rem !important;
+    }}
+    
+    /* Number Input +/- Buttons */
+    button[kind="secondary"] {{
+        background-color: transparent !important;
+        border: none !important;
+        color: #6c757d !important;
     }}
 
     /* File Uploader Styling */
