@@ -14,6 +14,7 @@ from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, Border, Side
 from openpyxl.utils import get_column_letter
+import shutil
 import streamlit.components.v1 as components
 
 # EXCEL LOGGING FUNCTION (CLEAN FORMAT)
@@ -223,7 +224,7 @@ Upload an Excel (.xlsx) with an **email** column.
 Use placeholders like `{name}`, `{position}`, `{company}`, etc.
 """)
 
-# REMEMBER ME SYSTEM (Option B)
+# REMEMBER ME SYSTEM
 
 # Initialize states
 if "saved_email" not in st.session_state:
@@ -414,13 +415,14 @@ if st.button("🚀 Send Now"):
         st.stop()
 
     # Save attachments temporarily
+    temp_dir = tempfile.mkdtemp()
     temp_paths = []
+    
     for file in uploaded_files:
-        ext = os.path.splitext(file.name)[1]
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
-        tmp.write(file.read())
-        tmp.close()
-        temp_paths.append(tmp.name)
+        file_path = os.path.join(temp_dir, file.name)
+        with open(file_path, "wb") as f:
+            f.write(file.read())
+        temp_paths.append(file_path)
 
     # Connect SMTP
     try:
@@ -478,8 +480,7 @@ if st.button("🚀 Send Now"):
         st.download_button("📥 Download Logs (Excel)", f, file_name=excel_name)
 
     # Cleanup temp files
-    for p in temp_paths:
-        try:
-            os.unlink(p)
-        except:
-            pass
+    try:
+        shutil.rmtree(temp_dir)
+    except:
+        pass
