@@ -18,6 +18,7 @@ import shutil
 import time
 import random
 import socket
+import csv
 import streamlit.components.v1 as components
 
 # EXCEL LOGGING FUNCTION (CLEAN FORMAT)
@@ -512,106 +513,151 @@ if st.button("🚀 Send Now"):
     # We will keep a small buffer of recent logs to show in the UI
     recent_logs = []
 
+    # INCREMENTAL CSV SETUP
+    ts_start = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_csv_path = os.path.join(temp_dir, f"backup_logs_{ts_start}.csv")
+    
+    # Create valid backup file with headers immediately
+    try:
+        with open(backup_csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Row", "Email", "Status", "Details", "Timestamp"])
+        st.caption(f"🛡️ Backup logs saving to: `{backup_csv_path}`")
+    except Exception as e:
+        st.warning(f"Could not create backup CSV: {e}")
+
     email_col = detected_fields["email"]
 
     for idx, row in df.iterrows():
-        body = st.session_state.body_html
+        try:
+            # Periodic Reconnection Logic (Every 50 emails)
+            if count > 0 and count % 50 == 0:
+                with status_placeholder:
+                    st.warning(f"🔄 Refreshing connection (processed {count})...")
+                try:
+                    yag = None # Force null
+                    time.sleep(2) # Brief pause
+                    yag = yagmail.SMTP(email_user, email_pass)
+                except Exception as e:
+                    # If reconnect fails, we'll let the retry logic inside the loop handle it per-email
+                    st.error(f"Reconnection warning: {e}")
 
-        for field, col in detected_fields.items():
-            body = body.replace(
-                f"{{{field}}}",
-                "" if pd.isna(row[col]) else str(row[col])
-            )
+            body = st.session_state.body_html
 
-        # Split multiple emails
-        raw_emails = re.split(r"[\/,; ]+", str(row[email_col]))
-        emails = [e for e in raw_emails if "@" in e]
+            for field, col in detected_fields.items():
+                body = body.replace(
+                    f"{{{field}}}",
+                    "" if pd.isna(row[col]) else str(row[col])
+                )
 
-        if not emails:
-            # Log skipped
-            entry = [idx, "N/A", "SKIPPED", "No valid email found", datetime.now()]
+            # Split multiple emails
+            raw_emails = re.split(r"[\/,; ]+", str(row[email_col]))
+            emails = [e for e in raw_emails if "@" in e]
+
+            if not emails:
+                # Log skipped
+                entry = [idx, "N/A", "SKIPPED", "No valid email found", datetime.now()]
+                logs.append(entry)
+                recent_logs.insert(0, entry) # Add to top
+                
+                # Append to backup CSV
+                with open(backup_csv_path, "a", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(entry)
+
+                count += 1
+                progress.progress(count / total)
+                
+                # Update Live UI
+                with status_placeholder:
+                    st.info(f"Skipping row {idx+1} (No email)")
+                continue
+
+            for email_addr in emails:
+                # Rate limiting delay
+                delay = random.uniform(min_d, max_d)
+                with status_placeholder:
+                    st.write(f"⏳ Waiting {delay:.1f}s before sending to **{email_addr}**...")
+                time.sleep(delay)
+
+                # TRY SENDING WITH RETRY LOGIC
+                sent_success = False
+                error_msg = ""
+                
+                # Attempt up to 2 times (Initial + 1 Retry)
+                for attempt in range(2):
+                    try:
+                        # Check if yag is alive/valid? Yagmail doesn't have a simple probe, 
+                        # but if the socket is dead, the send will raise.
+                        if yag is None:
+                            # Reconnect
+                            yag = yagmail.SMTP(email_user, email_pass)
+
+                        yag.send(
+                            to=email_addr,
+                            subject=subject,
+                            contents=body,
+                            attachments=temp_paths
+                        )
+                        sent_success = True
+                        break # Success, exit retry loop
+                        
+                    except Exception as e:
+                        error_msg = str(e)
+                        # If failed, Force disconnect/None to trigger reconnection on next attempt
+                        yag = None
+                        # Short pause before retry
+                        time.sleep(2)
+
+                if sent_success:
+                    entry = [idx, email_addr, "SENT", "OK", datetime.now()]
+                    logs.append(entry)
+                    recent_logs.insert(0, entry)
+                    with status_placeholder:
+                        st.success(f"✅ Sent to {email_addr}")
+                else:
+                    entry = [idx, email_addr, "FAILED", f"Error after retry: {error_msg}", datetime.now()]
+                    logs.append(entry)
+                    recent_logs.insert(0, entry)
+                    with status_placeholder:
+                        st.error(f"❌ Failed to send to {email_addr}")
+
+                # Append to backup CSV immediately
+                try:
+                    with open(backup_csv_path, "a", newline="", encoding="utf-8") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(entry)
+                except:
+                    pass
+
+                # Keep recent logs capped at 5 for UI cleanliness
+                if len(recent_logs) > 5:
+                    recent_logs.pop()
+                    
+                # Construct a small DF for display
+                live_df = pd.DataFrame(recent_logs, columns=["Row", "Email", "Status", "Details", "Timestamp"])
+                # formatted timestamp for display
+                if not live_df.empty:
+                    live_df['Timestamp'] = live_df['Timestamp'].apply(lambda x: x.strftime('%H:%M:%S'))
+                
+            count += 1
+            progress.progress(count / total)
+
+        except Exception as main_loop_err:
+            # Catastrophic row failure catcher
+            st.error(f"Critical error on row {idx}: {main_loop_err}")
+            entry = [idx, "ERROR", "CRITICAL_FAIL", str(main_loop_err), datetime.now()]
             logs.append(entry)
-            recent_logs.insert(0, entry) # Add to top
+            
+            try:
+                with open(backup_csv_path, "a", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(entry)
+            except:
+                pass
             
             count += 1
             progress.progress(count / total)
-            
-            # Update Live UI
-            with status_placeholder:
-                st.info(f"Skipping row {idx+1} (No email)")
-            continue
-
-        for email_addr in emails:
-            # Rate limiting delay
-            delay = random.uniform(min_d, max_d)
-            with status_placeholder:
-                st.write(f"⏳ Waiting {delay:.1f}s before sending to **{email_addr}**...")
-            time.sleep(delay)
-
-            # TRY SENDING WITH RETRY LOGIC
-            sent_success = False
-            error_msg = ""
-            
-            # Attempt up to 2 times (Initial + 1 Retry)
-            for attempt in range(2):
-                try:
-                    # Check if yag is alive/valid? Yagmail doesn't have a simple probe, 
-                    # but if the socket is dead, the send will raise.
-                    if yag is None:
-                        # Reconnect
-                        yag = yagmail.SMTP(email_user, email_pass)
-
-                    yag.send(
-                        to=email_addr,
-                        subject=subject,
-                        contents=body,
-                        attachments=temp_paths
-                    )
-                    sent_success = True
-                    break # Success, exit retry loop
-                    
-                except Exception as e:
-                    error_msg = str(e)
-                    # If failed, Force disconnect/None to trigger reconnection on next attempt
-                    yag = None
-                    # Short pause before retry
-                    time.sleep(2)
-
-            if sent_success:
-                entry = [idx, email_addr, "SENT", "OK", datetime.now()]
-                logs.append(entry)
-                recent_logs.insert(0, entry)
-                with status_placeholder:
-                    st.success(f"✅ Sent to {email_addr}")
-            else:
-                entry = [idx, email_addr, "FAILED", f"Error after retry: {error_msg}", datetime.now()]
-                logs.append(entry)
-                recent_logs.insert(0, entry)
-                with status_placeholder:
-                    st.error(f"❌ Failed to send to {email_addr}")
-
-            # Keep recent logs capped at 5 for UI cleanliness
-            if len(recent_logs) > 5:
-                recent_logs.pop()
-                
-            # Render mini table of recent actions
-            # We can't use st.dataframe inside the loop efficiently if it flickers, 
-            # but st.table or markdown is fine for small distinct updates.
-            # actually st.empty() + dataframe is fine.
-            
-            # Construct a small DF for display
-            live_df = pd.DataFrame(recent_logs, columns=["Row", "Email", "Status", "Details", "Timestamp"])
-            # formatted timestamp for display
-            if not live_df.empty:
-                live_df['Timestamp'] = live_df['Timestamp'].apply(lambda x: x.strftime('%H:%M:%S'))
-                
-            # We can print it below
-            # status_placeholder is used for the immediate status message.
-            # We need a separate placeholder for the table if we want it "sticky"
-            # But let's just let the user see the progress bar mostly.
-            
-        count += 1
-        progress.progress(count / total)
 
     # EXPORT CLEAN EXCEL LOG
     excel_path, excel_name = export_logs_excel(logs)
