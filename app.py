@@ -17,6 +17,7 @@ from openpyxl.utils import get_column_letter
 import shutil
 import time
 import random
+import socket
 import streamlit.components.v1 as components
 
 # EXCEL LOGGING FUNCTION (CLEAN FORMAT)
@@ -481,6 +482,16 @@ if st.button("🚀 Send Now"):
         temp_paths.append(file_path)
 
     # Connect SMTP
+    socket.setdefaulttimeout(60)  # Global timeout to prevent hanging
+
+    def connect_smtp():
+        try:
+            return yagmail.SMTP(email_user, email_pass)
+        except Exception as e:
+            return None, str(e)
+
+    # Initial connection
+    yag = None
     try:
         yag = yagmail.SMTP(email_user, email_pass)
     except Exception as e:
@@ -491,6 +502,15 @@ if st.button("🚀 Send Now"):
     total = len(df)
     progress = st.progress(0)
     count = 0
+    
+    # LIVE LOGS CONTAINER
+    st.divider()
+    st.subheader("📡 Live Activity Log")
+    status_placeholder = st.empty()
+    log_container = st.container()
+    
+    # We will keep a small buffer of recent logs to show in the UI
+    recent_logs = []
 
     email_col = detected_fields["email"]
 
@@ -508,34 +528,101 @@ if st.button("🚀 Send Now"):
         emails = [e for e in raw_emails if "@" in e]
 
         if not emails:
-            logs.append([idx, "", "NO_EMAIL", "SKIPPED", datetime.utcnow()])
+            # Log skipped
+            entry = [idx, "N/A", "SKIPPED", "No valid email found", datetime.now()]
+            logs.append(entry)
+            recent_logs.insert(0, entry) # Add to top
+            
             count += 1
             progress.progress(count / total)
+            
+            # Update Live UI
+            with status_placeholder:
+                st.info(f"Skipping row {idx+1} (No email)")
             continue
 
         for email_addr in emails:
-            # Rate limiting
+            # Rate limiting delay
             delay = random.uniform(min_d, max_d)
+            with status_placeholder:
+                st.write(f"⏳ Waiting {delay:.1f}s before sending to **{email_addr}**...")
             time.sleep(delay)
 
-            try:
-                yag.send(
-                    to=email_addr,
-                    subject=subject,
-                    contents=body,
-                    attachments=temp_paths
-                )
-                logs.append([idx, email_addr, "SENT", "OK", datetime.utcnow()])
-            except Exception as err:
-                logs.append([idx, email_addr, "FAILED", str(err), datetime.utcnow()])
+            # TRY SENDING WITH RETRY LOGIC
+            sent_success = False
+            error_msg = ""
+            
+            # Attempt up to 2 times (Initial + 1 Retry)
+            for attempt in range(2):
+                try:
+                    # Check if yag is alive/valid? Yagmail doesn't have a simple probe, 
+                    # but if the socket is dead, the send will raise.
+                    if yag is None:
+                        # Reconnect
+                        yag = yagmail.SMTP(email_user, email_pass)
 
+                    yag.send(
+                        to=email_addr,
+                        subject=subject,
+                        contents=body,
+                        attachments=temp_paths
+                    )
+                    sent_success = True
+                    break # Success, exit retry loop
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    # If failed, Force disconnect/None to trigger reconnection on next attempt
+                    yag = None
+                    # Short pause before retry
+                    time.sleep(2)
+
+            if sent_success:
+                entry = [idx, email_addr, "SENT", "OK", datetime.now()]
+                logs.append(entry)
+                recent_logs.insert(0, entry)
+                with status_placeholder:
+                    st.success(f"✅ Sent to {email_addr}")
+            else:
+                entry = [idx, email_addr, "FAILED", f"Error after retry: {error_msg}", datetime.now()]
+                logs.append(entry)
+                recent_logs.insert(0, entry)
+                with status_placeholder:
+                    st.error(f"❌ Failed to send to {email_addr}")
+
+            # Keep recent logs capped at 5 for UI cleanliness
+            if len(recent_logs) > 5:
+                recent_logs.pop()
+                
+            # Render mini table of recent actions
+            # We can't use st.dataframe inside the loop efficiently if it flickers, 
+            # but st.table or markdown is fine for small distinct updates.
+            # actually st.empty() + dataframe is fine.
+            
+            # Construct a small DF for display
+            live_df = pd.DataFrame(recent_logs, columns=["Row", "Email", "Status", "Details", "Timestamp"])
+            # formatted timestamp for display
+            if not live_df.empty:
+                live_df['Timestamp'] = live_df['Timestamp'].apply(lambda x: x.strftime('%H:%M:%S'))
+                
+            # We can print it below
+            # status_placeholder is used for the immediate status message.
+            # We need a separate placeholder for the table if we want it "sticky"
+            # But let's just let the user see the progress bar mostly.
+            
         count += 1
         progress.progress(count / total)
 
     # EXPORT CLEAN EXCEL LOG
     excel_path, excel_name = export_logs_excel(logs)
 
-    st.success("All emails processed!")
+    st.success("🎉 All emails processed!")
+    
+    # Show full final log
+    st.write("### Final Execution Log")
+    final_df = pd.DataFrame(logs, columns=["Row", "Email", "Status", "Details", "Timestamp"])
+    st.dataframe(final_df)
+
     with open(excel_path, "rb") as f:
         st.download_button("📥 Download Logs (Excel)", f, file_name=excel_name)
 
