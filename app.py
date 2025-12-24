@@ -16,9 +16,7 @@ from openpyxl.styles import Font, Border, Side
 from openpyxl.utils import get_column_letter
 import shutil
 import time
-import random
 import socket
-import csv
 import streamlit.components.v1 as components
 
 # EXCEL LOGGING FUNCTION (CLEAN FORMAT)
@@ -445,12 +443,6 @@ uploaded_files = st.file_uploader(
 
 st.header("6. Send Emails")
 
-with st.expander("⚙️ Safety & Rate Limiting", expanded=True):
-    st.write("Add a delay between emails to avoid getting blocked by Google.")
-    c1, c2 = st.columns(2)
-    min_d = c1.number_input("Min Delay (sec)", 1, 60, 5)
-    max_d = c2.number_input("Max Delay (sec)", 1, 60, 15)
-
 if st.button("🚀 Send Now"):
     if df is None:
         st.error("Please upload an Excel file.")
@@ -485,14 +477,6 @@ if st.button("🚀 Send Now"):
     # Connect SMTP
     socket.setdefaulttimeout(60)  # Global timeout to prevent hanging
 
-    def connect_smtp():
-        try:
-            return yagmail.SMTP(email_user, email_pass)
-        except Exception as e:
-            return None, str(e)
-
-    # Initial connection
-    yag = None
     try:
         yag = yagmail.SMTP(email_user, email_pass)
     except Exception as e:
@@ -503,172 +487,50 @@ if st.button("🚀 Send Now"):
     total = len(df)
     progress = st.progress(0)
     count = 0
-    
-    # LIVE LOGS CONTAINER
-    st.divider()
-    st.subheader("📡 Live Activity Log")
-    status_placeholder = st.empty()
-    log_container = st.container()
-    
-    # We will keep a small buffer of recent logs to show in the UI
-    recent_logs = []
-
-    # INCREMENTAL CSV SETUP
-    ts_start = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_csv_path = os.path.join(temp_dir, f"backup_logs_{ts_start}.csv")
-    
-    # Create valid backup file with headers immediately
-    try:
-        with open(backup_csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["Row", "Email", "Status", "Details", "Timestamp"])
-        st.caption(f"🛡️ Backup logs saving to: `{backup_csv_path}`")
-    except Exception as e:
-        st.warning(f"Could not create backup CSV: {e}")
 
     email_col = detected_fields["email"]
 
     for idx, row in df.iterrows():
-        try:
-            # Periodic Reconnection Logic (Every 50 emails)
-            if count > 0 and count % 50 == 0:
-                with status_placeholder:
-                    st.warning(f"🔄 Refreshing connection (processed {count})...")
-                try:
-                    yag = None # Force null
-                    time.sleep(2) # Brief pause
-                    yag = yagmail.SMTP(email_user, email_pass)
-                except Exception as e:
-                    # If reconnect fails, we'll let the retry logic inside the loop handle it per-email
-                    st.error(f"Reconnection warning: {e}")
+        body = st.session_state.body_html
 
-            body = st.session_state.body_html
+        for field, col in detected_fields.items():
+            body = body.replace(
+                f"{{{field}}}",
+                "" if pd.isna(row[col]) else str(row[col])
+            )
 
-            for field, col in detected_fields.items():
-                body = body.replace(
-                    f"{{{field}}}",
-                    "" if pd.isna(row[col]) else str(row[col])
-                )
+        # Split multiple emails
+        raw_emails = re.split(r"[\/,; ]+", str(row[email_col]))
+        emails = [e for e in raw_emails if "@" in e]
 
-            # Split multiple emails
-            raw_emails = re.split(r"[\/,; ]+", str(row[email_col]))
-            emails = [e for e in raw_emails if "@" in e]
-
-            if not emails:
-                # Log skipped
-                entry = [idx, "N/A", "SKIPPED", "No valid email found", datetime.now()]
-                logs.append(entry)
-                recent_logs.insert(0, entry) # Add to top
-                
-                # Append to backup CSV
-                with open(backup_csv_path, "a", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(entry)
-
-                count += 1
-                progress.progress(count / total)
-                
-                # Update Live UI
-                with status_placeholder:
-                    st.info(f"Skipping row {idx+1} (No email)")
-                continue
-
-            for email_addr in emails:
-                # Rate limiting delay
-                delay = random.uniform(min_d, max_d)
-                with status_placeholder:
-                    st.write(f"⏳ Waiting {delay:.1f}s before sending to **{email_addr}**...")
-                time.sleep(delay)
-
-                # TRY SENDING WITH RETRY LOGIC
-                sent_success = False
-                error_msg = ""
-                
-                # Attempt up to 2 times (Initial + 1 Retry)
-                for attempt in range(2):
-                    try:
-                        # Check if yag is alive/valid? Yagmail doesn't have a simple probe, 
-                        # but if the socket is dead, the send will raise.
-                        if yag is None:
-                            # Reconnect
-                            yag = yagmail.SMTP(email_user, email_pass)
-
-                        yag.send(
-                            to=email_addr,
-                            subject=subject,
-                            contents=body,
-                            attachments=temp_paths
-                        )
-                        sent_success = True
-                        break # Success, exit retry loop
-                        
-                    except Exception as e:
-                        error_msg = str(e)
-                        # If failed, Force disconnect/None to trigger reconnection on next attempt
-                        yag = None
-                        # Short pause before retry
-                        time.sleep(2)
-
-                if sent_success:
-                    entry = [idx, email_addr, "SENT", "OK", datetime.now()]
-                    logs.append(entry)
-                    recent_logs.insert(0, entry)
-                    with status_placeholder:
-                        st.success(f"✅ Sent to {email_addr}")
-                else:
-                    entry = [idx, email_addr, "FAILED", f"Error after retry: {error_msg}", datetime.now()]
-                    logs.append(entry)
-                    recent_logs.insert(0, entry)
-                    with status_placeholder:
-                        st.error(f"❌ Failed to send to {email_addr}")
-
-                # Append to backup CSV immediately
-                try:
-                    with open(backup_csv_path, "a", newline="", encoding="utf-8") as f:
-                        writer = csv.writer(f)
-                        writer.writerow(entry)
-                except:
-                    pass
-
-                # Keep recent logs capped at 5 for UI cleanliness
-                if len(recent_logs) > 5:
-                    recent_logs.pop()
-                    
-                # Construct a small DF for display
-                live_df = pd.DataFrame(recent_logs, columns=["Row", "Email", "Status", "Details", "Timestamp"])
-                # formatted timestamp for display
-                if not live_df.empty:
-                    live_df['Timestamp'] = live_df['Timestamp'].apply(lambda x: x.strftime('%H:%M:%S'))
-                
+        if not emails:
+            logs.append([idx, "", "NO_EMAIL", "SKIPPED", datetime.utcnow()])
             count += 1
             progress.progress(count / total)
+            continue
 
-        except Exception as main_loop_err:
-            # Catastrophic row failure catcher
-            st.error(f"Critical error on row {idx}: {main_loop_err}")
-            entry = [idx, "ERROR", "CRITICAL_FAIL", str(main_loop_err), datetime.now()]
-            logs.append(entry)
-            
+        for email_addr in emails:
+            # Fixed small safety delay
+            time.sleep(1)
+
             try:
-                with open(backup_csv_path, "a", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(entry)
-            except:
-                pass
-            
-            count += 1
-            progress.progress(count / total)
+                yag.send(
+                    to=email_addr,
+                    subject=subject,
+                    contents=body,
+                    attachments=temp_paths
+                )
+                logs.append([idx, email_addr, "SENT", "OK", datetime.utcnow()])
+            except Exception as err:
+                logs.append([idx, email_addr, "FAILED", str(err), datetime.utcnow()])
+
+        count += 1
+        progress.progress(count / total)
 
     # EXPORT CLEAN EXCEL LOG
     excel_path, excel_name = export_logs_excel(logs)
 
-    st.success("🎉 All emails processed!")
-    
-    # Show full final log
-    st.write("### Final Execution Log")
-    final_df = pd.DataFrame(logs, columns=["Row", "Email", "Status", "Details", "Timestamp"])
-    st.dataframe(final_df)
-
+    st.success("All emails processed!")
     with open(excel_path, "rb") as f:
         st.download_button("📥 Download Logs (Excel)", f, file_name=excel_name)
 
